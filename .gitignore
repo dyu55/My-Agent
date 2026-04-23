@@ -1,0 +1,24 @@
+# MyAgent
+.aider*
+.env
+logs/
+__pycache__/
+*.pyc
+*.pyo
+
+# External Memory
+memory/session_logs/*.json
+memory/memories.json
+
+# IDE
+.DS_Store
+.vscode/
+.idea/
+
+# 测试
+.pytest_cache/
+.coverage
+htmlcov/
+
+# 工作区临时文件
+workspace/__pycache__/
