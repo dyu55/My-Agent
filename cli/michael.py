@@ -51,10 +51,10 @@ class MichaelCLI:
 ║                                                                            ║
 ║   🤖 {name} - Local Coding Agent                                           ║
 ║                                                                            ║
-║   Enter task description to execute, for example:                           ║
-║   → "Implement user login functionality"                                   ║
-║   → "Refactor auth.py module"                                               ║
-║   → "Add unit test coverage"                                                ║
+║   Enter task description to execute, for example:                             ║
+║   → "Implement user login functionality"                                    ║
+║   → "Refactor auth.py module"                                              ║
+║   → "Add unit test coverage"                                                 ║
 ║                                                                            ║
 ║   Commands: /help for all commands                                          ║
 ║                                                                            ║

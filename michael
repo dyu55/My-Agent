@@ -45,7 +45,7 @@ def load_env_file(path: Path) -> None:
 
 
 def get_cli_name() -> str:
-    """Get the CLI name from config or prompt user."""
+    """Get the CLI name from config or use default."""
     config_dir = Path.home() / ".config" / "myagent"
     config_file = config_dir / "config.json"
 
@@ -55,30 +55,25 @@ def get_cli_name() -> str:
             config = json.load(f)
             return config.get("cli_name", "myagent")
 
-    # First run - prompt for name
+    # First run - use default name "myagent"
     print("""
-╔══════════════════════════════════════════════════════════════════╗
-║                                                                  ║
-║   Welcome to MyAgent CLI!                                        ║
-║                                                                  ║
-║   What would you like to call this CLI?                           ║
-║   (e.g., myagent, coder, dev, assistant)                        ║
-║                                                                  ║
-╚══════════════════════════════════════════════════════════════════╝
+╔════════════════════════════════════════════════════════════════════════════╗
+║                                                                            ║
+║   Welcome to MyAgent CLI!                                                  ║
+║                                                                            ║
+║   Default CLI name: myagent                                               ║
+║   To customize, edit: ~/.config/myagent/config.json                       ║
+║                                                                            ║
+╚════════════════════════════════════════════════════════════════════════════╝
 """)
-    name = input("Enter name (default: myagent): ").strip().lower()
-    if not name:
-        name = "myagent"
+
+    name = "myagent"
 
     # Save config
     config_dir.mkdir(parents=True, exist_ok=True)
     with open(config_file, "w") as f:
         import json
         json.dump({"cli_name": name, "version": "1.0"}, f)
-
-    print(f"\n✅ CLI name set to: {name}")
-    print(f"   Config saved to: {config_file}\n")
-    print("You can change this later by editing the config file.\n")
 
     return name
 
