@@ -95,7 +95,7 @@ class MichaelCLI:
             provider=self.provider,
             base_url=self.base_url,
             api_key=self.api_key,
-            workspace=str(self.workspace),
+            workspace=self.workspace,  # Path object
         )
         self.agent = AgentEngine(config)
 
