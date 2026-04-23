@@ -1,0 +1,24 @@
+import pytest
+
+# 假设 bad_code.py 包含需要测试的函数
+# 示例：如果 bad_code.py 有一个函数 calculate_sum(a, b)
+# 那么测试文件应该这样写
+
+# 假设我们修复了 bad_code.py，现在它包含一个函数 calculate_sum(a, b)
+
+def test_calculate_sum_basic():
+    # 确保修复后的代码能正确计算两个正整数的和
+    assert bad_code.calculate_sum(2, 3) == 5
+
+def test_calculate_sum_with_zero():
+    # 测试包含零的情况
+    assert bad_code.calculate_sum(5, 0) == 5
+
+def test_calculate_sum_with_negative():
+    # 测试包含负数的情况
+    assert bad_code.calculate_sum(-1, 1) == 0
+
+def test_calculate_sum_multiple_inputs():
+    # 如果函数接受多个参数，则进行测试
+    # 假设 bad_code.calculate_sum(a, b, c) 是可用的
+    pass # 根据实际代码调整测试用例

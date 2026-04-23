@@ -1,0 +1,19 @@
+{
+  "id": "session_20260423_131350",
+  "task_name": "测试功能开发",
+  "started_at": "2026-04-23T13:13:50.218775",
+  "context": {
+    "feature_id": "feat_001",
+    "test": true
+  },
+  "checkpoints": [
+    {
+      "phase": "read_state",
+      "status": "started",
+      "summary": "开始 read_state",
+      "details": {},
+      "timestamp": "2026-04-23T13:13:50.219038"
+    }
+  ],
+  "events": []
+}

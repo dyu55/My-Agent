@@ -5,7 +5,7 @@
   "metadata": {
     "project_name": "MyAgent",
     "description": "本地 Coding Agent - 外部记忆模式",
-    "current_phase": "phase_1_scaffolding",
+    "current_phase": "phase_3_completed",
     "external_memory_enabled": false
   },
   "features": [
@@ -27,7 +27,14 @@
           "id": "feat_001_task_02",
           "name": "流程搭设",
           "description": "读取状态→编写代码→运行测试→Git提交→清空上下文",
-          "status": "pending",
+          "status": "completed",
+          "created_at": "2026-04-23T00:00:00.000000"
+        },
+        {
+          "id": "feat_001_task_03",
+          "name": "集成到 Agent",
+          "description": "将外部记忆模式集成到 AgentEngine",
+          "status": "completed",
           "created_at": "2026-04-23T00:00:00.000000"
         }
       ],

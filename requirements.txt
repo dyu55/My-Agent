@@ -1,2 +1,4 @@
-# 安装 ollama 库
 ollama
+openai>=1,<2
+pydantic>=2,<3
+requests>=2,<3

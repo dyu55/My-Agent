@@ -1,99 +1,214 @@
+#!/usr/bin/env python3
+"""
+MyAgent - Coding Agent with local 8B/9B models
+Reference: Claude Code architecture
+
+Usage:
+    python main.py "你的任务描述"           # 执行单次任务
+    python main.py --chat                  # 启动交互式 CLI
+    python main.py --provider ollama "任务"
+    python main.py --model qwen2.5:9b "任务"
+"""
+
+import argparse
 import os
-import json
-import subprocess
+import sys
 from pathlib import Path
-import ollama  # 请先 pip install ollama
 
-# --- 配置区 ---
-WORKSPACE = Path("./workspace").resolve()
-WORKSPACE.mkdir(exist_ok=True)
-MODEL_NAME = "gemma2:27b"  # 确保你 Ollama 里有这个模型
-MAX_FAILURES = 5
+from agent import AgentEngine, create_agent_from_env
 
-def is_safe_path(path):
-    target = (WORKSPACE / path).resolve()
-    return target.is_relative_to(WORKSPACE)
 
-# --- 工具定义 ---
-def tool_write(path, content):
-    if not is_safe_path(path): return "Error: Access Denied"
-    (WORKSPACE / path).write_text(content, encoding='utf-8')
-    return f"Success: File {path} written."
+def load_env_file(path: Path) -> None:
+    """Load environment variables from .env file."""
+    if not path.exists():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        os.environ.setdefault(key.strip(), value.strip())
 
-def tool_read(path, start=1, end=100):
-    if not is_safe_path(path): return "Error: Access and path check failed"
-    try:
-        lines = (WORKSPACE / path).read_text().splitlines()
-        subset = lines[start-1:end]
-        # 给读取的内容加上行号，方便 Agent 观察
-        numbered = "\n".join([f"{i+start}: {line}" for i, line in enumerate(subset)])
-        return f"Content of {path}:\n{numbered}"
-    except Exception as e:
-        return f"Error reading file: {str(e)}"
 
-def tool_execute(script):
-    try:
-        # 在 workspace 目录下执行
-        result = subprocess.run(
-            script, shell=True, capture_output=True, text=True, cwd=WORKSPACE, timeout=30
+def parse_args() -> argparse.Namespace:
+    """Parse command line arguments."""
+    parser = argparse.ArgumentParser(
+        description="MyAgent - Coding Agent with local models",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    python main.py "创建一个 TODO 应用"
+    python main.py --chat                    # 交互式对话
+    python main.py --chat --model qwen2.5:9b
+    python main.py --model qwen2.5:9b "实现用户认证功能"
+    python main.py --provider rsxermu "重构代码并添加测试"
+        """,
+    )
+    parser.add_argument(
+        "task",
+        nargs="?",
+        default=None,
+        help="The task to execute",
+    )
+    parser.add_argument(
+        "--chat",
+        "-c",
+        action="store_true",
+        help="Start interactive CLI mode (like Claude Code)",
+    )
+    parser.add_argument(
+        "--model",
+        "-m",
+        help="Model to use (overrides MODEL_NAME env var)",
+    )
+    parser.add_argument(
+        "--provider",
+        "-p",
+        choices=["ollama", "rsxermu"],
+        help="Provider to use (overrides ACTIVE_PROVIDER env var)",
+    )
+    parser.add_argument(
+        "--workspace",
+        "-w",
+        default="workspace",
+        help="Workspace directory (default: workspace)",
+    )
+    parser.add_argument(
+        "--max-retries",
+        type=int,
+        default=3,
+        help="Max retries per task (default: 3)",
+    )
+    parser.add_argument(
+        "--no-llm-reflection",
+        action="store_true",
+        help="Disable LLM-based reflection (faster but less accurate)",
+    )
+    parser.add_argument(
+        "--list-providers",
+        action="store_true",
+        help="List available providers",
+    )
+    return parser.parse_args()
+
+
+def list_providers() -> None:
+    """List available providers."""
+    print("Available providers:")
+    print("  - ollama: 远程 Ollama 服务器 (默认: http://192.168.0.124:11434)")
+    print("  - rsxermu: 远程 OpenAI 兼容 API")
+    print()
+    print("Environment variables:")
+    print("  OLLAMA_HOST: Ollama 服务器 URL (默认: http://192.168.0.124:11434)")
+    print("  MODEL_NAME: 模型名称 (默认: gemma4:latest)")
+    print("  RSXERMU_BASE_URL: rsxermu API URL")
+    print("  RSXERMU_API_KEY: rsxermu API key")
+
+
+def create_agent(args: argparse.Namespace) -> AgentEngine:
+    """Create agent with given arguments."""
+    from agent.engine import AgentConfig
+
+    workspace = Path(args.workspace).resolve()
+    workspace.mkdir(parents=True, exist_ok=True)
+
+    config = AgentConfig(
+        workspace=workspace,
+        model=args.model or os.environ.get("MODEL_NAME", "gemma4:latest"),
+        provider=args.provider or os.environ.get("ACTIVE_PROVIDER", "ollama"),
+        base_url=os.environ.get(
+            "OLLAMA_HOST",
+            "http://192.168.0.124:11434" if args.provider != "rsxermu" else "https://rsxermu666.cn"
+        ),
+        api_key=os.environ.get("RSXERMU_API_KEY"),
+        max_task_retries=args.max_retries,
+        enable_llm_reflection=not args.no_llm_reflection,
+        trace_enabled=True,
+    )
+
+    return AgentEngine(config)
+
+
+def run_cli(args: argparse.Namespace) -> int:
+    """Run interactive CLI mode."""
+    from cli import CLIInterface
+
+    workspace = Path(args.workspace).resolve()
+    workspace.mkdir(parents=True, exist_ok=True)
+
+    model = args.model or os.environ.get("MODEL_NAME", "gemma4:latest")
+    provider = args.provider or os.environ.get("ACTIVE_PROVIDER", "ollama")
+
+    if provider == "ollama":
+        base_url = os.environ.get("OLLAMA_HOST", "http://192.168.0.124:11434")
+    else:
+        base_url = os.environ.get(
+            "RSXERMU_BASE_URL",
+            "https://rsxermu666.cn"
         )
-        status = "Success" if result.returncode == 0 else "Failed"
-        return f"Exit Code: {result.returncode}\nWhat happened:\n{result.stdout}\n{result.stderr}"
+
+    cli = CLIInterface(
+        workspace=workspace,
+        model=model,
+        provider=provider,
+        base_url=base_url,
+        api_key=os.environ.get("RSXERMU_API_KEY"),
+    )
+
+    try:
+        cli.run()
+        return 0
+    except KeyboardInterrupt:
+        print("\n再见!")
+        return 0
     except Exception as e:
-        return f"Error executing command: {str(e)}"
+        print(f"\n❌ 错误: {e}")
+        return 1
 
-# --- 核心调度器 ---
-def run_agent(task):
-    messages = [
-        {"role": "system", "content": f"你是一个 Coding Agent。你必须通过 JSON 调用工具。工作目录是 {WORKSPACE}。格式参考之前讨论的 Thought + JSON。"},
-        {"role": "user", "content": task}
-    ]
-    
-    failure_count = 0
-    
-    while failure_count < MAX_FAILURES:
-        response = ollama.chat(model=MODEL_NAME, messages=messages)
-        raw_content = response['message']['content']
-        print(f"\n--- Model Output ---\n{raw_content}")
 
-        # 尝试提取 JSON
-        try:
-            # 方案 A 的严格解析：找到第一个 { 和最后一个 }
-            start_idx = raw_content.find('{')
-            end_idx = raw_content.rfind('}') + 1
-            
-            if start_idx == -1 or end_idx == 0:
-                raise ValueError("No JSON block found in response.")
-                
-            action = json.loads(raw_content[start_idx:end_idx])
-            
-            # 执行工具逻辑
-            cmd = action.get("command")
-            if cmd == "write":
-                obs = tool_write(action['path'], action['content'])
-            elif cmd == "read":
-                obs = tool_read(action['path'], action.get('start', 1), action.get('end', 100))
-            elif cmd == "execute":
-                obs = tool_execute(action['script'])
-            elif cmd == "finish":
-                print("✅ 任务完成！")
-                break
-            else:
-                obs = "Error: Unknown command."
+def main() -> int:
+    """Main entry point."""
+    load_env_file(Path(__file__).parent / ".env")
 
-            # 成功执行一次动作后，重置失败计数
-            failure_count = 0 
-            messages.append({"role": "assistant", "content": raw_content})
-            messages.append({"role": "user", "content": f"What happened:\n{obs}"})
+    args = parse_args()
 
-        except Exception as e:
-            failure_count += 1
-            print(f"⚠️ 格式解析错误 ({failure_count}/{MAX_FAILURES}): {e}")
-            messages.append({"role": "user", "content": "Error: Your last response was not a valid JSON. Please try again."})
+    # 交互式 CLI 模式
+    if args.chat:
+        return run_cli(args)
 
-    if failure_count >= MAX_FAILURES:
-        print("❌ 连续失败次数过多，程序终止。")
+    if args.list_providers:
+        list_providers()
+        return 0
 
-# --- 启动 ---
+    task = args.task
+    if not task:
+        print("Error: No task provided.")
+        print("Usage: python main.py \"your task description\"")
+        print("       python main.py --chat  # 交互式对话")
+        print("       python main.py --help for more options")
+        return 1
+
+    print(f"🚀 初始化 Agent...")
+    print(f"   Provider: {args.provider or os.environ.get('ACTIVE_PROVIDER', 'ollama')}")
+    print(f"   Model: {args.model or os.environ.get('MODEL_NAME', 'gemma4:latest')}")
+    print(f"   Workspace: {args.workspace}")
+    print()
+
+    try:
+        agent = create_agent(args)
+        result = agent.run(task)
+        print(f"\n✨ 完成: {result}")
+        return 0
+    except KeyboardInterrupt:
+        print("\n\n⚠️  用户中断")
+        return 130
+    except Exception as e:
+        print(f"\n\n❌ 错误: {e}")
+        if os.environ.get("DEBUG"):
+            import traceback
+            traceback.print_exc()
+        return 1
+
+
 if __name__ == "__main__":
-    run_agent("在 main.py 里写一个简单的 FastAPI 服务并运行它。")
+    sys.exit(main())
