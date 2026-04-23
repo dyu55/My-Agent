@@ -61,8 +61,8 @@ def get_cli_name() -> str:
 ║                                                                            ║
 ║   Welcome to MyAgent CLI!                                                  ║
 ║                                                                            ║
-║   Default CLI name: myagent                                               ║
-║   To customize, edit: ~/.config/myagent/config.json                       ║
+║   Default CLI name: myagent                                                ║
+║   To customize, edit: ~/.config/myagent/config.json                        ║
 ║                                                                            ║
 ╚════════════════════════════════════════════════════════════════════════════╝
 """)

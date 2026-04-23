@@ -49,14 +49,14 @@ class MichaelCLI:
     DEFAULT_BANNER = """
 ╔════════════════════════════════════════════════════════════════════════════╗
 ║                                                                            ║
-║   🤖 {name} - Local Coding Agent                                           ║
+║   🤖 {name} - Local Coding Agent                                            ║
 ║                                                                            ║
-║   Enter task description to execute, for example:                             ║
-║   → "Implement user login functionality"                                    ║
+║   Enter task description to execute, for example:                          ║
+║   → "Implement user login functionality"                                   ║
 ║   → "Refactor auth.py module"                                              ║
-║   → "Add unit test coverage"                                                 ║
+║   → "Add unit test coverage"                                               ║
 ║                                                                            ║
-║   Commands: /help for all commands                                          ║
+║   Commands: /help for all commands                                         ║
 ║                                                                            ║
 ╚════════════════════════════════════════════════════════════════════════════╝
 """
