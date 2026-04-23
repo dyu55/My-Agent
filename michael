@@ -57,14 +57,14 @@ def get_cli_name() -> str:
 
     # First run - prompt for name
     print("""
-╔═══════════════════════════════════════════════════════════╗
-║                                                           ║
-║   Welcome to MyAgent CLI!                               ║
-║                                                           ║
-║   What would you like to call this CLI?                   ║
-║   (e.g., myagent, coder, dev, assistant)                 ║
-║                                                           ║
-╚═══════════════════════════════════════════════════════════╝
+╔══════════════════════════════════════════════════════════════════╗
+║                                                                  ║
+║   Welcome to MyAgent CLI!                                        ║
+║                                                                  ║
+║   What would you like to call this CLI?                           ║
+║   (e.g., myagent, coder, dev, assistant)                        ║
+║                                                                  ║
+╚══════════════════════════════════════════════════════════════════╝
 """)
     name = input("Enter name (default: myagent): ").strip().lower()
     if not name:
