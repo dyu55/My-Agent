@@ -49,7 +49,7 @@ class MichaelCLI:
     DEFAULT_BANNER = """
 ╔════════════════════════════════════════════════════════════════════════════╗
 ║                                                                            ║
-║   🤖 {name} - Local Coding Agent                                            ║
+║   🤖 {name} - Local Coding Agent                                           ║
 ║                                                                            ║
 ║   Enter task description to execute, for example:                          ║
 ║   → "Implement user login functionality"                                   ║
