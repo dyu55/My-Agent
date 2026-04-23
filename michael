@@ -1,27 +1,26 @@
 #!/usr/bin/env python3
 """
-michael - CLI entry point for MyAgent (Claude Code 风格)
+MyAgent CLI entry point - Claude Code style coding agent
 
 Usage:
-    michael                          # 启动交互式 CLI
-    michael "创建 TODO 应用"          # 执行单次任务
-    michael -m qwen2.5:9b            # 使用指定模型
-    michael --classic                 # 使用经典 CLI 模式
+    myagent                          # Start interactive CLI
+    myagent "create TODO app"        # Execute single task
+    myagent -m qwen2.5:9b           # Use specific model
 
-交互模式:
-    >>> 实现用户登录功能
-    >>> 帮我添加注册页面
-    >>> /task 添加支付模块
+Interactive mode:
+    >>> Implement user login functionality
+    >>> Add a registration page
+    >>> /task Add payment module
 
-命令:
-    /task <描述>    执行任务
-    /edit <文件>    查看文件
-    /run <命令>     执行命令
-    /test           运行测试
-    /git <args>     Git 操作
-    /status         显示状态
-    /help           显示帮助
-    /exit           退出
+Commands:
+    /task <desc>    Execute task
+    /edit <file>    View file
+    /run <cmd>      Execute command
+    /test           Run pytest
+    /git <args>     Git operations
+    /status         Show status
+    /help           Help
+    /exit           Exit
 """
 
 import os
@@ -45,8 +44,47 @@ def load_env_file(path: Path) -> None:
         os.environ.setdefault(key.strip(), value.strip())
 
 
+def get_cli_name() -> str:
+    """Get the CLI name from config or prompt user."""
+    config_dir = Path.home() / ".config" / "myagent"
+    config_file = config_dir / "config.json"
+
+    if config_file.exists():
+        import json
+        with open(config_file, "r") as f:
+            config = json.load(f)
+            return config.get("cli_name", "myagent")
+
+    # First run - prompt for name
+    print("""
+╔═══════════════════════════════════════════════════════════╗
+║                                                           ║
+║   Welcome to MyAgent CLI!                               ║
+║                                                           ║
+║   What would you like to call this CLI?                   ║
+║   (e.g., myagent, coder, dev, assistant)                 ║
+║                                                           ║
+╚═══════════════════════════════════════════════════════════╝
+""")
+    name = input("Enter name (default: myagent): ").strip().lower()
+    if not name:
+        name = "myagent"
+
+    # Save config
+    config_dir.mkdir(parents=True, exist_ok=True)
+    with open(config_file, "w") as f:
+        import json
+        json.dump({"cli_name": name, "version": "1.0"}, f)
+
+    print(f"\n✅ CLI name set to: {name}")
+    print(f"   Config saved to: {config_file}\n")
+    print("You can change this later by editing the config file.\n")
+
+    return name
+
+
 def get_base_url(provider: str) -> str:
-    """根据 provider 获取 base URL"""
+    """Get base URL based on provider."""
     if provider == "ollama":
         return os.environ.get("OLLAMA_HOST", "http://192.168.0.124:11434")
     elif provider == "rsxermu":
@@ -59,28 +97,31 @@ def main():
     # Load environment
     load_env_file(PROJECT_ROOT / ".env")
 
+    # Get CLI name
+    cli_name = get_cli_name()
+
     import argparse
 
     parser = argparse.ArgumentParser(
-        prog="michael",
-        description="Michael - 本地 Coding Agent (Claude Code 风格)",
+        prog=cli_name,
+        description=f"{cli_name} - Local Coding Agent (Claude Code style)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-示例:
-    michael                          # 交互式 CLI
-    michael "创建一个 TODO 应用"      # 执行单次任务
-    michael -m qwen2.5:9b           # 使用指定模型
-    michael --classic               # 使用经典 CLI 模式
+        epilog=f"""
+Examples:
+    {cli_name}                          # Interactive CLI
+    {cli_name} "Create a TODO app"    # Execute single task
+    {cli_name} -m qwen2.5:9b          # Use specific model
+    {cli_name} --classic               # Use classic CLI mode
 
-命令:
-    /task <描述>    执行任务
-    /edit <文件>    查看文件
-    /run <命令>     执行命令
-    /test           运行测试
-    /git <args>     Git 操作
-    /status         显示状态
-    /help           显示帮助
-    /exit           退出
+Commands:
+    /task <desc>    Execute task
+    /edit <file>    View file
+    /run <cmd>      Execute command
+    /test           Run pytest
+    /git <args>     Git operations
+    /status         Show status
+    /help           Help
+    /exit           Exit
         """,
     )
 
@@ -122,11 +163,11 @@ def main():
     # Determine base URL
     base_url = args.base_url or get_base_url(args.provider)
 
-    # 创建 workspace
+    # Create workspace
     workspace = Path(args.workspace).resolve()
     workspace.mkdir(parents=True, exist_ok=True)
 
-    # 执行单次任务
+    # Execute single task
     if args.task:
         from agent import AgentEngine
         from agent.engine import AgentConfig
@@ -139,7 +180,7 @@ def main():
             api_key=os.environ.get("RSXERMU_API_KEY"),
         )
 
-        print(f"🚀 执行任务: {args.task}")
+        print(f"🚀 Executing task: {args.task}")
         print(f"   Model: {args.model}")
         print(f"   Provider: {args.provider}")
         print()
@@ -147,15 +188,15 @@ def main():
         try:
             agent = AgentEngine(config)
             result = agent.run(args.task)
-            print(f"\n✨ 完成: {result}")
+            print(f"\n✨ Done: {result}")
         except Exception as e:
-            print(f"\n❌ 错误: {e}")
+            print(f"\n❌ Error: {e}")
             return 1
         return 0
 
-    # 交互式模式
+    # Interactive mode
     if args.classic:
-        # 经典 CLI 模式
+        # Classic CLI mode
         from cli import CLIInterface
 
         cli = CLIInterface(
@@ -168,9 +209,9 @@ def main():
         try:
             cli.run()
         except KeyboardInterrupt:
-            print("\n再见!")
+            print("\nGoodbye!")
     else:
-        # Claude Code 风格 CLI
+        # Claude Code style CLI
         from cli.michael import MichaelCLI
 
         cli = MichaelCLI(
@@ -179,11 +220,12 @@ def main():
             provider=args.provider,
             base_url=base_url,
             api_key=os.environ.get("RSXERMU_API_KEY"),
+            cli_name=cli_name,
         )
         try:
             cli.run()
         except KeyboardInterrupt:
-            print("\n再见!")
+            print("\nGoodbye!")
 
     return 0
 
