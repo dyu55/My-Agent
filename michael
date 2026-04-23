@@ -1,0 +1,192 @@
+#!/usr/bin/env python3
+"""
+michael - CLI entry point for MyAgent (Claude Code 风格)
+
+Usage:
+    michael                          # 启动交互式 CLI
+    michael "创建 TODO 应用"          # 执行单次任务
+    michael -m qwen2.5:9b            # 使用指定模型
+    michael --classic                 # 使用经典 CLI 模式
+
+交互模式:
+    >>> 实现用户登录功能
+    >>> 帮我添加注册页面
+    >>> /task 添加支付模块
+
+命令:
+    /task <描述>    执行任务
+    /edit <文件>    查看文件
+    /run <命令>     执行命令
+    /test           运行测试
+    /git <args>     Git 操作
+    /status         显示状态
+    /help           显示帮助
+    /exit           退出
+"""
+
+import os
+import sys
+from pathlib import Path
+
+# Add project root to path
+PROJECT_ROOT = Path(__file__).parent.resolve()
+sys.path.insert(0, str(PROJECT_ROOT))
+
+
+def load_env_file(path: Path) -> None:
+    """Load environment variables from .env file."""
+    if not path.exists():
+        return
+    for line in path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        os.environ.setdefault(key.strip(), value.strip())
+
+
+def get_base_url(provider: str) -> str:
+    """根据 provider 获取 base URL"""
+    if provider == "ollama":
+        return os.environ.get("OLLAMA_HOST", "http://192.168.0.124:11434")
+    elif provider == "rsxermu":
+        return os.environ.get("RSXERMU_BASE_URL", "https://rsxermu666.cn")
+    return "http://localhost:11434"
+
+
+def main():
+    """Main entry point."""
+    # Load environment
+    load_env_file(PROJECT_ROOT / ".env")
+
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        prog="michael",
+        description="Michael - 本地 Coding Agent (Claude Code 风格)",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+示例:
+    michael                          # 交互式 CLI
+    michael "创建一个 TODO 应用"      # 执行单次任务
+    michael -m qwen2.5:9b           # 使用指定模型
+    michael --classic               # 使用经典 CLI 模式
+
+命令:
+    /task <描述>    执行任务
+    /edit <文件>    查看文件
+    /run <命令>     执行命令
+    /test           运行测试
+    /git <args>     Git 操作
+    /status         显示状态
+    /help           显示帮助
+    /exit           退出
+        """,
+    )
+
+    parser.add_argument(
+        "task",
+        nargs="?",
+        default=None,
+        help="Task to execute",
+    )
+    parser.add_argument(
+        "--model", "-m",
+        default=os.environ.get("MODEL_NAME", "gemma4:latest"),
+        help="Model to use",
+    )
+    parser.add_argument(
+        "--provider", "-p",
+        choices=["ollama", "rsxermu"],
+        default=os.environ.get("ACTIVE_PROVIDER", "ollama"),
+        help="Provider to use",
+    )
+    parser.add_argument(
+        "--base-url", "-u",
+        default=None,
+        help="API Base URL",
+    )
+    parser.add_argument(
+        "--workspace", "-w",
+        default="workspace",
+        help="Workspace directory",
+    )
+    parser.add_argument(
+        "--classic", "-c",
+        action="store_true",
+        help="Use classic CLI mode",
+    )
+
+    args = parser.parse_args()
+
+    # Determine base URL
+    base_url = args.base_url or get_base_url(args.provider)
+
+    # 创建 workspace
+    workspace = Path(args.workspace).resolve()
+    workspace.mkdir(parents=True, exist_ok=True)
+
+    # 执行单次任务
+    if args.task:
+        from agent import AgentEngine
+        from agent.engine import AgentConfig
+
+        config = AgentConfig(
+            workspace=workspace,
+            model=args.model,
+            provider=args.provider,
+            base_url=base_url,
+            api_key=os.environ.get("RSXERMU_API_KEY"),
+        )
+
+        print(f"🚀 执行任务: {args.task}")
+        print(f"   Model: {args.model}")
+        print(f"   Provider: {args.provider}")
+        print()
+
+        try:
+            agent = AgentEngine(config)
+            result = agent.run(args.task)
+            print(f"\n✨ 完成: {result}")
+        except Exception as e:
+            print(f"\n❌ 错误: {e}")
+            return 1
+        return 0
+
+    # 交互式模式
+    if args.classic:
+        # 经典 CLI 模式
+        from cli import CLIInterface
+
+        cli = CLIInterface(
+            workspace=workspace,
+            model=args.model,
+            provider=args.provider,
+            base_url=base_url,
+            api_key=os.environ.get("RSXERMU_API_KEY"),
+        )
+        try:
+            cli.run()
+        except KeyboardInterrupt:
+            print("\n再见!")
+    else:
+        # Claude Code 风格 CLI
+        from cli.michael import MichaelCLI
+
+        cli = MichaelCLI(
+            workspace=workspace,
+            model=args.model,
+            provider=args.provider,
+            base_url=base_url,
+            api_key=os.environ.get("RSXERMU_API_KEY"),
+        )
+        try:
+            cli.run()
+        except KeyboardInterrupt:
+            print("\n再见!")
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
