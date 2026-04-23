@@ -88,6 +88,17 @@ class MichaelCLI:
 
         self._init_agent()
 
+    def _init_agent(self) -> None:
+        """Initialize the agent engine."""
+        config = AgentConfig(
+            model=self.model,
+            provider=self.provider,
+            base_url=self.base_url,
+            api_key=self.api_key,
+            workspace=str(self.workspace),
+        )
+        self.agent = AgentEngine(config)
+
     def _get_banner(self) -> str:
         """Get custom banner with CLI name."""
         return self.DEFAULT_BANNER.format(name=self.cli_name)
