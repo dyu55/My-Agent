@@ -1,0 +1,10 @@
+[project]
+name = "text_processor"
+version = "0.1.0"
+description = "A simple CLI text processing tool"
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"

@@ -93,48 +93,48 @@ class TaskPlanner:
     Uses Chain-of-Thought prompts for better performance with small models.
     """
 
-    PLANNING_PROMPT = """你是一个项目规划专家。你的任务是将用户的需求分解成可执行的子任务。
+    PLANNING_PROMPT = """You are a project planning expert. Your task is to decompose user requirements into executable subtasks.
 
-## Few-shot 示例（帮助你理解任务分解）
+## Few-shot Examples
 
-示例 1: 简单任务
-输入: "运行测试"
-输出:
+Example 1: Simple Task
+Input: "Run tests"
+Output:
 {
-  "analysis": "这是一个简单的单步任务",
+  "analysis": "This is a simple single-step task",
   "subtasks": [
-    {"id": "task_1", "description": "运行 pytest 测试", "dependencies": []}
+    {"id": "task_1", "description": "Run pytest tests", "dependencies": []}
   ]
 }
 
-示例 2: 复杂任务
-输入: "创建一个待办事项应用"
-输出:
+Example 2: Complex Task
+Input: "Create a todo app"
+Output:
 {
-  "analysis": "需要创建前后端完整应用",
+  "analysis": "Need to create a complete frontend and backend application",
   "subtasks": [
-    {"id": "task_1", "description": "设计数据模型"},
-    {"id": "task_2", "description": "创建后端 API", "dependencies": ["task_1"]},
-    {"id": "task_3", "description": "创建前端界面"},
-    {"id": "task_4", "description": "测试验证", "dependencies": ["task_2", "task_3"]}
+    {"id": "task_1", "description": "Design data models"},
+    {"id": "task_2", "description": "Create backend API", "dependencies": ["task_1"]},
+    {"id": "task_3", "description": "Create frontend UI"},
+    {"id": "task_4", "description": "Test and verify", "dependencies": ["task_2", "task_3"]}
   ]
 }
 
-## 输出格式
-你必须返回一个 JSON 对象，包含以下字段：
-- "analysis": 对任务的分析理解
-- "subtasks": 子任务列表，每个包含：
-  - "id": 唯一标识符（如 "task_1"）
-  - "description": 清晰的子任务描述
-  - "dependencies": 依赖的其他任务ID列表（可选，默认为空）
+## Output Format
+You must return a JSON object with these fields:
+- "analysis": Your understanding of the task
+- "subtasks": List of subtasks, each containing:
+  - "id": Unique identifier (e.g., "task_1")
+  - "description": Clear subtask description
+  - "dependencies": List of task IDs this depends on (default: empty)
 
-## 规则
-1. 子任务应该是原子的、独立的
-2. 考虑任务之间的依赖关系
-3. 初始任务应该包括了解项目现状
-4. 最后任务应该包括验证和测试
+## Rules
+1. Subtasks should be atomic and independent
+2. Consider dependencies between tasks
+3. Initial tasks should include understanding project state
+4. Final tasks should include verification and testing
 
-现在分析以下任务：
+Now analyze this task:
 """
 
     def __init__(self, llm_client: Any):
@@ -246,18 +246,18 @@ class TaskPlanner:
         failed_task.error = error_message
 
         # Try to decompose the failed task into simpler steps
-        prompt = f"""任务执行失败，需要重新规划。
+        prompt = f"""Task execution failed, need to re-plan.
 
-失败的任务: {failed_task.description}
-错误信息: {error_message}
+Failed task: {failed_task.description}
+Error message: {error_message}
 
-请将这个失败的任务分解成更简单的步骤，或提供替代方案。
+Please decompose this failed task into simpler steps, or provide an alternative approach.
 
-输出格式:
+Output format:
 {{
-  "analysis": "失败原因分析和替代方案",
+  "analysis": "Failure cause analysis and alternative approach",
   "new_subtasks": [
-    {{"id": "替代任务ID", "description": "更简单的任务描述"}}
+    {{"id": "alternative_task_id", "description": "Simpler task description"}}
   ]
 }}
 """

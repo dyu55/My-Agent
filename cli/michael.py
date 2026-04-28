@@ -14,6 +14,7 @@ Commands:
     /run <cmd>      Execute command
     /test           Run tests
     /git <args>     Git operations
+    /search <query> Search memories
     /status         Show status
     /help           Help
     /exit           Exit
@@ -185,6 +186,7 @@ class MichaelCLI:
             "external-memory": self._cmd_external_memory,
             "memory": self._cmd_external_memory,
             "mem": self._cmd_external_memory,
+            "search": self._cmd_search,
         }
 
         handler = handlers.get(cmd)
@@ -378,6 +380,7 @@ Type task description directly to execute, for example:
   /test           Run pytest
   /git <args>     Git operations
   /status         Show status
+  /search <query> Search memories
   /help           Show this help
 
 Shortcuts:
@@ -400,6 +403,81 @@ External Memory:
         parts = args.split() if args else []
         result = self.external_memory.handle_command(parts)
         print(result)
+
+    def _cmd_search(self, args: str) -> None:
+        """
+        Search memories - Layer 1 MVP
+
+        Usage: /search <query> [--tags TAG1,TAG2] [--limit N]
+        Example: /search authentication --limit 5
+        """
+        # 解析参数
+        import shlex
+        parts = shlex.split(args) if args else []
+
+        query = ""
+        tags = None
+        limit = 5
+
+        i = 0
+        while i < len(parts):
+            if parts[i] == "--tags" and i + 1 < len(parts):
+                tags = parts[i + 1].split(",")
+                i += 2
+            elif parts[i] == "--limit" and i + 1 < len(parts):
+                limit = int(parts[i + 1])
+                i += 2
+            elif parts[i] == "--help":
+                print(self._search_help())
+                return
+            else:
+                query = parts[i]
+                i += 1
+
+        if not query:
+            print("Usage: /search <query> [--tags TAG1,TAG2] [--limit N]")
+            print("Example: /search authentication --limit 5")
+            return
+
+        # 执行搜索
+        results = self.external_memory.search_memories(
+            query=query,
+            limit=limit,
+            tags=tags
+        )
+
+        if not results:
+            print(f"🔍 No memories found for: '{query}'")
+            return
+
+        print(f"\n🔍 Search results for: '{query}'")
+        print("=" * 60)
+
+        for i, result in enumerate(results, 1):
+            print(f"\n{i}. [Similarity: {result['similarity']:.2%}]")
+            print(f"   📝 {result['content'][:100]}...")
+            if result.get("tags"):
+                print(f"   🏷️  Tags: {', '.join(result['tags'])}")
+            if result.get("session_id"):
+                print(f"   💾 Session: {result['session_id']}")
+
+    def _search_help(self) -> str:
+        """Search command help"""
+        return """
+/search <query> [--tags TAG1,TAG2] [--limit N]
+
+Search through stored memories using query text.
+
+Options:
+  <query>           Search query text
+  --tags TAG1,TAG2  Filter by tags (comma-separated)
+  --limit N         Maximum results (default: 5)
+
+Examples:
+  /search authentication
+  /search login --tags auth,security --limit 10
+  /search refactor --tags python
+"""
 
     def stop(self) -> None:
         """Stop CLI"""

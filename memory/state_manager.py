@@ -4,6 +4,7 @@
 1. 读取/写入进度表 (progress.json)
 2. 持久化会话日志
 3. 状态检查点管理
+4. 会话元数据自动捕获 (Layer 1)
 """
 
 import json
@@ -11,7 +12,10 @@ import re
 from datetime import datetime
 from enum import Enum
 from pathlib import Path
-from typing import Any
+from typing import Any, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from memory.embedding_store import EmbeddingStore
 
 
 class TaskStatus(Enum):
@@ -28,22 +32,35 @@ class StateManager:
     外部记忆状态管理器。
 
     管理功能清单、进度表、会话日志的生命周期。
+    Layer 1 新增：会话元数据自动捕获
     """
 
     def __init__(
         self,
         state_dir: str = "memory",
-        session_logs_dir: str = "memory/session_logs"
+        session_logs_dir: str = "memory/session_logs",
+        embedding_store: "EmbeddingStore | None" = None
     ):
         self.state_dir = Path(state_dir)
         self.session_logs_dir = Path(session_logs_dir)
         self.progress_file = self.state_dir / "progress.json"
+        self._embedding_store = embedding_store
 
         # 确保目录存在
         self.state_dir.mkdir(parents=True, exist_ok=True)
         self.session_logs_dir.mkdir(parents=True, exist_ok=True)
 
         self._init_progress_file()
+
+    @property
+    def embedding_store(self) -> "EmbeddingStore":
+        """延迟加载 EmbeddingStore"""
+        if self._embedding_store is None:
+            from memory.embedding_store import create_embedding_store
+            self._embedding_store = create_embedding_store(
+                store_dir=str(self.state_dir / "sessions")
+            )
+        return self._embedding_store
 
     def _init_progress_file(self) -> None:
         """初始化进度表文件"""
@@ -223,7 +240,8 @@ class StateManager:
         Returns:
             会话 ID
         """
-        session_id = f"session_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        # 使用微秒级时间戳确保唯一性
+        session_id = f"session_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
         session_data = {
             "id": session_id,
             "task_name": task_name,
@@ -371,3 +389,129 @@ class StateManager:
             f"功能: {len(features)} 个\n"
             f"任务: {completed_tasks}/{total_tasks} 完成"
         )
+
+    # ==================== Layer 1: 会话元数据自动捕获 ====================
+
+    def capture_session_metadata(
+        self,
+        session_id: str,
+        task_name: str,
+        files_changed: list[str] | None = None,
+        commit_message: str | None = None,
+        summary: str | None = None
+    ) -> str:
+        """
+        捕获会话元数据并存储到嵌入存储 (Layer 1)
+
+        Args:
+            session_id: 会话 ID
+            task_name: 任务名称
+            files_changed: 变更的文件列表
+            commit_message: 提交消息
+            summary: 任务摘要
+
+        Returns:
+            记忆 ID
+        """
+        # 构建记忆内容
+        content_parts = [f"任务: {task_name}"]
+
+        if summary:
+            content_parts.append(f"摘要: {summary}")
+
+        if files_changed:
+            file_list = ", ".join(files_changed[:10])  # 限制文件数量
+            content_parts.append(f"变更文件: {file_list}")
+
+        if commit_message:
+            content_parts.append(f"提交: {commit_message}")
+
+        content = "\n".join(content_parts)
+
+        # 提取标签
+        tags = ["session", "auto-capture"]
+        if files_changed:
+            # 从文件扩展名提取标签
+            extensions = set(Path(f).suffix for f in files_changed if Path(f).suffix)
+            tags.extend([ext[1:] for ext in extensions if ext])  # 去掉 "."
+
+        # 存储到嵌入存储
+        metadata = {
+            "task_name": task_name,
+            "files_changed": files_changed or [],
+            "commit_message": commit_message,
+            "summary": summary,
+            "session_id": session_id
+        }
+
+        memory_id = self.embedding_store.remember(
+            content=content,
+            metadata=metadata,
+            tags=tags,
+            session_id=session_id
+        )
+
+        return memory_id
+
+    def auto_capture_on_task_complete(
+        self,
+        task_name: str,
+        files_changed: list[str] | None = None,
+        commit_message: str | None = None,
+        summary: str | None = None
+    ) -> str | None:
+        """
+        任务完成时自动捕获 (钩入 AgentEngine)
+
+        在 AgentEngine 的 task_complete 阶段调用此方法
+
+        Returns:
+            记忆 ID，失败返回 None
+        """
+        session_id = self.get_current_session()
+        if not session_id:
+            return None
+
+        try:
+            return self.capture_session_metadata(
+                session_id=session_id,
+                task_name=task_name,
+                files_changed=files_changed,
+                commit_message=commit_message,
+                summary=summary
+            )
+        except Exception:
+            # 静默失败，不影响主流程
+            return None
+
+    def search_memories(
+        self,
+        query: str,
+        limit: int = 5,
+        tags: list[str] | None = None
+    ) -> list[dict[str, Any]]:
+        """
+        搜索记忆 (Layer 1)
+
+        Args:
+            query: 查询文本
+            limit: 返回数量
+            tags: 按标签过滤
+
+        Returns:
+            匹配的記憶列表
+        """
+        return self.embedding_store.recall(
+            query=query,
+            limit=limit,
+            tags=tags
+        )
+
+    def get_session_memories(self, session_id: str) -> list[dict[str, Any]]:
+        """获取指定会话的所有记忆"""
+        return self.embedding_store.get_by_session(session_id)
+
+    def get_memory_stats(self) -> dict[str, Any]:
+        """获取记忆统计"""
+        return self.embedding_store.get_stats()
+

@@ -1,0 +1,1161 @@
+Thinking...
+Here's a thinking process:
+
+1.  **Understand User Request:**
+   - **Project:** CLI Code Snippet Manager
+   - **Language:** Python 3.10+
+   - **Features:** Type hints, argparse with subcommands (add/list/get/edit[18D[K
+(add/list/get/edit/delete/search), sqlite3, pytest
+   - **Structure:**
+     - `src/main.py`: CLI entry point
+     - `src/database.py`: SQLite wrapper, CRUD
+     - `src/models.py`: Data models
+     - `src/commands/add.py`, `list.py`, `get.py`, `edit.py`, `delete.py`, [K
+`search.py`
+     - `src/utils/config.py`, `formatters.py`
+     - `tests/test_database.py`, `tests/test_models.py`
+     - `pyproject.toml`, `README.md`
+   - **Database Schema:** `id`, `name`, `language`, `content`, `description[12D[K
+`description`, `tags` (JSON), `created_at`, `updated_at`
+   - **Output Format:** Each file separated by `===FILE: path ===`, only co[2D[K
+code, no explanations.
+
+2.  **Deconstruct & Plan Each File:**
+
+   * `pyproject.toml`: Basic project config, dependencies (maybe `rich` for[3D[K
+for formatting? But user said `sqlite3`, `argparse`, `pytest`. I'll stick t[1D[K
+to standard library + pytest. I'll add `click` or `rich`? No, keep it simpl[5D[K
+simple with standard lib. I'll just list `pytest` as dev dependency.)
+   * `README.md`: Basic markdown description.
+   * `src/models.py`: Dataclasses or Pydantic? Python 3.10+ supports datacl[6D[K
+dataclasses well. I'll use `dataclasses` with type hints. Fields: `id` (int[4D[K
+(int), `name` (str), `language` (str), `content` (str), `description` (str)[5D[K
+(str), `tags` (list[str]), `created_at` (str/datetime), `updated_at` (str/d[6D[K
+(str/datetime).
+   * `src/database.py`: SQLite connection, table creation, CRUD methods ret[3D[K
+returning `Snippet` objects or dicts. Handle JSON tags. Use `sqlite3` modul[5D[K
+module.
+   * `src/utils/config.py`: Database path configuration, maybe default to `[1D[K
+`./snippets.db`.
+   * `src/utils/formatters.py`: Functions to format snippets for CLI output[6D[K
+output (table-like or simple print).
+   * `src/commands/*.py`: Each implements the logic for the subcommand, cal[3D[K
+calling database methods.
+   * `src/main.py`: `argparse` setup with subcommands, routing to command m[1D[K
+modules.
+   * `tests/test_models.py`, `tests/test_database.py`: Basic pytest cases.
+
+   Let's draft each file mentally, ensuring compliance with requirements.
+
+   **`pyproject.toml`**
+   ```toml
+   [project]
+   name = "snippet-cli"
+   version = "0.1.0"
+   description = "A CLI code snippet manager"
+   requires-python = ">=3.10"
+   dependencies = []
+
+   [project.optional-dependencies]
+   dev = ["pytest"]
+
+   [tool.pytest.ini_options]
+   testpaths = ["tests"]
+   ```
+
+   **`README.md`**
+   Basic markdown explaining usage, install, commands.
+
+   **`src/models.py`**
+   Use `dataclass`, `from __future__ import annotations`, `datetime` for ti[2D[K
+timestamps.
+   ```python
+   from dataclasses import dataclass, field
+   from datetime import datetime
+   from typing import Optional
+
+   @dataclass
+   class Snippet:
+       id: Optional[int] = None
+       name: str = ""
+       language: str = ""
+       content: str = ""
+       description: str = ""
+       tags: list[str] = field(default_factory=list)
+       created_at: Optional[datetime] = None
+       updated_at: Optional[datetime] = None
+
+       def to_dict(self) -> dict:
+           return {
+               "id": self.id,
+               "name": self.name,
+               "language": self.language,
+               "content": self.content,
+               "description": self.description,
+               "tags": self.tags,
+               "created_at": self.created_at.isoformat() if self.created_at[15D[K
+self.created_at else None,
+               "updated_at": self.updated_at.isoformat() if self.updated_at[15D[K
+self.updated_at else None,
+           }
+   ```
+
+   **`src/utils/config.py`**
+   ```python
+   import os
+   from pathlib import Path
+
+   DEFAULT_DB_PATH = Path.home() / ".snippet_manager" / "snippets.db"
+
+   def get_db_path() -> str:
+       return str(DEFAULT_DB_PATH)
+   ```
+
+   **`src/utils/formatters.py`**
+   Simple text formatting. Maybe use `tabulate`? But standard lib only. I'l[3D[K
+I'll write a simple formatter.
+   ```python
+   from models import Snippet
+   from typing import Iterable
+
+   def print_snippet(snippet: Snippet) -> None:
+       print(f"ID: {snippet.id}")
+       print(f"Name: {snippet.name}")
+       print(f"Language: {snippet.language}")
+       print(f"Description: {snippet.description}")
+       print(f"Tags: {', '.join(snippet.tags) if snippet.tags else 'None'}"[8D[K
+'None'}")
+       print(f"Created: {snippet.created_at}")
+       print(f"Updated: {snippet.updated_at}")
+       print("-" * 40)
+       print(snippet.content)
+       print("=" * 40)
+
+   def print_snippet_list(snippets: Iterable[Snippet]) -> None:
+       if not snippets:
+           print("No snippets found.")
+           return
+       print(f"{'ID':<5} {'Name':<15} {'Language':<10} {'Tags':<20} {'Updat[7D[K
+{'Updated'}")
+       print("-" * 65)
+       for s in snippets:
+           tags = ", ".join(s.tags)[:17] + "..." if len(s.tags) > 1 else ",[2D[K
+", ".join(s.tags)
+           print(f"{s.id:<5} {s.name:<15} {s.language:<10} {tags:<20} {s.up[5D[K
+{s.updated_at}")
+   ```
+   Wait, imports in formatters should be relative or absolute? I'll use abs[3D[K
+absolute imports assuming `src` is in PYTHONPATH, or just define them prope[5D[K
+properly. I'll adjust imports later to be consistent. Actually, for CLI pro[3D[K
+projects, it's common to import from `src.models`. I'll stick to absolute i[1D[K
+imports like `from src.models import Snippet` or just relative within the p[1D[K
+package. I'll use `from .models import Snippet` if in same package, but str[3D[K
+structure says `src/models.py`. I'll use absolute imports `from models impo[4D[K
+import Snippet` and assume running with `-m src.main` or similar. To be saf[3D[K
+safe, I'll use relative imports where appropriate, or just standard absolut[7D[K
+absolute imports from `src` root. I'll adjust to `from src.models import Sn[2D[K
+Snippet` or just keep it simple: `from models import Snippet` and note that[4D[K
+that `PYTHONPATH=src`. Actually, I'll use `from src.models import Snippet` [K
+to be explicit, or just assume the user runs it properly. I'll stick to `fr[3D[K
+`from src.models import Snippet` for clarity.
+
+   Let's refine `formatters.py`:
+   ```python
+   from src.models import Snippet
+   from typing import Iterable
+
+   def print_snippet(snippet: Snippet) -> None:
+       ...
+   ```
+
+   **`src/database.py`**
+   Needs to handle JSON tags, timestamps, CRUD.
+   ```python
+   import sqlite3
+   import json
+   from datetime import datetime
+   from typing import List, Optional
+   from src.models import Snippet
+   from src.utils.config import get_db_path
+
+   class SnippetDB:
+       def __init__(self, db_path: Optional[str] = None):
+           self.db_path = db_path or get_db_path()
+           self.conn = sqlite3.connect(self.db_path)
+           self._init_db()
+
+       def _init_db(self) -> None:
+           cursor = self.conn.cursor()
+           cursor.execute("""
+               CREATE TABLE IF NOT EXISTS snippets (
+                   id INTEGER PRIMARY KEY AUTOINCREMENT,
+                   name TEXT NOT NULL,
+                   language TEXT NOT NULL,
+                   content TEXT NOT NULL,
+                   description TEXT DEFAULT '',
+                   tags TEXT DEFAULT '[]',
+                   created_at TEXT NOT NULL,
+                   updated_at TEXT NOT NULL
+               )
+           """)
+           self.conn.commit()
+
+       def _row_to_snippet(self, row: tuple) -> Snippet:
+           return Snippet(
+               id=row[0],
+               name=row[1],
+               language=row[2],
+               content=row[3],
+               description=row[4],
+               tags=json.loads(row[5]),
+               created_at=datetime.fromisoformat(row[6]),
+               updated_at=datetime.fromisoformat(row[7])
+           )
+
+       def add(self, snippet: Snippet) -> Snippet:
+           now = datetime.now().isoformat()
+           cursor = self.conn.cursor()
+           cursor.execute("""
+               INSERT INTO snippets (name, language, content, description, [K
+tags, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)
+           """, (snippet.name, snippet.language, snippet.content, snippet.d[9D[K
+snippet.description,
+                 json.dumps(snippet.tags), now, now))
+           self.conn.commit()
+           snippet.id = cursor.lastrowid
+           snippet.created_at = datetime.fromisoformat(now)
+           snippet.updated_at = datetime.fromisoformat(now)
+           return snippet
+
+       def list_all(self) -> List[Snippet]:
+           cursor = self.conn.cursor()
+           cursor.execute("SELECT * FROM snippets ORDER BY updated_at DESC"[5D[K
+DESC")
+           return [self._row_to_snippet(row) for row in cursor.fetchall()]
+
+       def get(self, snippet_id: int) -> Optional[Snippet]:
+           cursor = self.conn.cursor()
+           cursor.execute("SELECT * FROM snippets WHERE id = ?", (snippet_i[10D[K
+(snippet_id,))
+           row = cursor.fetchone()
+           return self._row_to_snippet(row) if row else None
+
+       def update(self, snippet: Snippet) -> Optional[Snippet]:
+           cursor = self.conn.cursor()
+           cursor.execute("""
+               UPDATE snippets SET name=?, language=?, content=?, descripti[9D[K
+description=?, tags=?, updated_at=?
+               WHERE id=?
+           """, (snippet.name, snippet.language, snippet.content, snippet.d[9D[K
+snippet.description,
+                 json.dumps(snippet.tags), datetime.now().isoformat(), snip[4D[K
+snippet.id))
+           self.conn.commit()
+           return self.get(snippet.id)
+
+       def delete(self, snippet_id: int) -> bool:
+           cursor = self.conn.cursor()
+           cursor.execute("DELETE FROM snippets WHERE id = ?", (snippet_id,[12D[K
+(snippet_id,))
+           self.conn.commit()
+           return cursor.rowcount > 0
+
+       def search(self, query: str) -> List[Snippet]:
+           cursor = self.conn.cursor()
+           like_pattern = f"%{query}%"
+           cursor.execute("""
+               SELECT * FROM snippets
+               WHERE name LIKE ? OR language LIKE ? OR content LIKE ? OR de[2D[K
+description LIKE ?
+               ORDER BY updated_at DESC
+           """, (like_pattern, like_pattern, like_pattern, like_pattern))
+           return [self._row_to_snippet(row) for row in cursor.fetchall()]
+
+       def close(self) -> None:
+           self.conn.close()
+   ```
+
+   **`src/commands/add.py`**
+   ```python
+   from src.models import Snippet
+   from src.database import SnippetDB
+
+   def run(args) -> None:
+       snippet = Snippet(
+           name=args.name,
+           language=args.language,
+           content=args.content,
+           description=args.description or "",
+           tags=args.tags.split(",") if args.tags else []
+       )
+       db = SnippetDB()
+       try:
+           added = db.add(snippet)
+           print(f"Snippet added successfully! ID: {added.id}")
+       finally:
+           db.close()
+   ```
+
+   **`src/commands/list.py`**
+   ```python
+   from src.database import SnippetDB
+   from src.utils.formatters import print_snippet_list
+
+   def run(args) -> None:
+       db = SnippetDB()
+       try:
+           snippets = db.list_all()
+           print_snippet_list(snippets)
+       finally:
+           db.close()
+   ```
+
+   **`src/commands/get.py`**
+   ```python
+   from src.database import SnippetDB
+   from src.utils.formatters import print_snippet
+
+   def run(args) -> None:
+       db = SnippetDB()
+       try:
+           snippet = db.get(args.id)
+           if snippet:
+               print_snippet(snippet)
+           else:
+               print(f"Snippet with ID {args.id} not found.")
+       finally:
+           db.close()
+   ```
+
+   **`src/commands/edit.py`**
+   ```python
+   from src.models import Snippet
+   from src.database import SnippetDB
+   from src.utils.formatters import print_snippet
+
+   def run(args) -> None:
+       db = SnippetDB()
+       try:
+           snippet = db.get(args.id)
+           if not snippet:
+               print(f"Snippet with ID {args.id} not found.")
+               return
+
+           # Update fields if provided
+           if args.name:
+               snippet.name = args.name
+           if args.language:
+               snippet.language = args.language
+           if args.content:
+               snippet.content = args.content
+           if args.description:
+               snippet.description = args.description
+           if args.tags:
+               snippet.tags = args.tags.split(",")
+
+           updated = db.update(snippet)
+           if updated:
+               print(f"Snippet updated successfully! ID: {updated.id}")
+               print_snippet(updated)
+       finally:
+           db.close()
+   ```
+
+   **`src/commands/delete.py`**
+   ```python
+   from src.database import SnippetDB
+
+   def run(args) -> None:
+       db = SnippetDB()
+       try:
+           success = db.delete(args.id)
+           if success:
+               print(f"Snippet {args.id} deleted successfully.")
+           else:
+               print(f"Snippet with ID {args.id} not found.")
+       finally:
+           db.close()
+   ```
+
+   **`src/commands/search.py`**
+   ```python
+   from src.database import SnippetDB
+   from src.utils.formatters import print_snippet_list
+
+   def run(args) -> None:
+       db = SnippetDB()
+       try:
+           results = db.search(args.query)
+           print_snippet_list(results)
+       finally:
+           db.close()
+   ```
+
+   **`src/main.py`**
+   ```python
+   import argparse
+   import sys
+   from src.commands import add, lst, get, edit, delete, search
+
+   def main() -> None:
+       parser = argparse.ArgumentParser(description="CLI Code Snippet Manag[5D[K
+Manager")
+       subparsers = parser.add_subparsers(dest="command", help="Available c[1D[K
+commands")
+
+       # add
+       add_parser = subparsers.add_parser("add", help="Add a new snippet")
+       add_parser.add_argument("--name", "-n", required=True, help="Snippet[13D[K
+help="Snippet name")
+       add_parser.add_argument("--language", "-l", required=True, help="Pro[9D[K
+help="Programming language")
+       add_parser.add_argument("--content", "-c", required=True, help="Code[10D[K
+help="Code content")
+       add_parser.add_argument("--description", "-d", default="", help="Des[9D[K
+help="Description")
+       add_parser.add_argument("--tags", "-t", default="", help="Comma-sepa[16D[K
+help="Comma-separated tags")
+
+       # list
+       subparsers.add_parser("list", help="List all snippets")
+
+       # get
+       get_parser = subparsers.add_parser("get", help="Get a snippet by ID"[3D[K
+ID")
+       get_parser.add_argument("id", type=int, help="Snippet ID")
+
+       # edit
+       edit_parser = subparsers.add_parser("edit", help="Edit a snippet")
+       edit_parser.add_argument("id", type=int, help="Snippet ID")
+       edit_parser.add_argument("--name", "-n", help="New name")
+       edit_parser.add_argument("--language", "-l", help="New language")
+       edit_parser.add_argument("--content", "-c", help="New content")
+       edit_parser.add_argument("--description", "-d", help="New descriptio[10D[K
+description")
+       edit_parser.add_argument("--tags", "-t", help="New comma-separated t[1D[K
+tags")
+
+       # delete
+       delete_parser = subparsers.add_parser("delete", help="Delete a snipp[5D[K
+snippet")
+       delete_parser.add_argument("id", type=int, help="Snippet ID")
+
+       # search
+       search_parser = subparsers.add_parser("search", help="Search snippet[7D[K
+snippets")
+       search_parser.add_argument("query", help="Search query")
+
+       args = parser.parse_args()
+
+       if args.command is None:
+           parser.print_help()
+           sys.exit(1)
+
+       commands = {
+           "add": add.run,
+           "list": lst.run,
+           "get": get.run,
+           "edit": edit.run,
+           "delete": delete.run,
+           "search": search.run,
+       }
+
+       try:
+           commands[args.command](args)
+       except Exception as e:
+           print(f"Error: {e}", file=sys.stderr)
+           sys.exit(1)
+
+   if __name__ == "__main__":
+       main()
+   ```
+   Note: `list` is a builtin, so I named the module `lst` in `src/commands/[14D[K
+`src/commands/`. The prompt says `list.py`. I'll rename it to `list_snippet[13D[K
+`list_snippets.py` or just handle the import carefully. Python allows impor[5D[K
+importing `list` if aliased, but it's bad practice. I'll stick to the promp[5D[K
+prompt's `list.py` but import it as `import commands.list as list_cmd` or s[1D[K
+similar. Actually, I'll just name it `list.py` as requested, and import it [K
+as `from src.commands import list as list_cmd`. Or better, I'll just use `l[2D[K
+`list.py` and import it properly. Python 3 handles `from src.commands impor[5D[K
+import list` fine if aliased. I'll use `import src.commands.list as list_cm[7D[K
+list_cmd` to be safe. Or I'll just follow the prompt exactly: `src/commands[13D[K
+`src/commands/list.py`. I'll import it as `import src.commands.list as list[4D[K
+list_module`.
+
+   Let's adjust `main.py` imports:
+   ```python
+   from src.commands import add, list as list_cmd, get, edit, delete, searc[5D[K
+search
+   ...
+   commands = {
+       "add": add.run,
+       "list": list_cmd.run,
+       "get": get.run,
+       "edit": edit.run,
+       "delete": delete.run,
+       "search": search.run,
+   }
+   ```
+
+   **`tests/test_models.py`**
+   ```python
+   import pytest
+   from src.models import Snippet
+   from datetime import datetime
+
+   def test_snippet_creation():
+       snippet = Snippet(name="test", language="python", content="print('hi[18D[K
+content="print('hi')")
+       assert snippet.name == "test"
+       assert snippet.tags == []
+       assert snippet.id is None
+
+   def test_snippet_to_dict():
+       snippet = Snippet(id=1, name="test", language="python", content="cod[12D[K
+content="code", tags=["a", "b"])
+       d = snippet.to_dict()
+       assert d["name"] == "test"
+       assert d["tags"] == ["a", "b"]
+       assert d["created_at"] is None
+   ```
+
+   **`tests/test_database.py`**
+   ```python
+   import pytest
+   import os
+   import tempfile
+   from src.database import SnippetDB
+   from src.models import Snippet
+
+   @pytest.fixture
+   def temp_db():
+       with tempfile.NamedTemporaryFile(delete=False, suffix=".db") as f:
+           path = f.name
+       db = SnippetDB(path)
+       yield db
+       db.close()
+       os.unlink(path)
+
+   def test_add_and_get(temp_db: SnippetDB):
+       snippet = Snippet(name="hello", language="bash", content="echo hi", [K
+tags=["test"])
+       added = temp_db.add(snippet)
+       assert added.id is not None
+       fetched = temp_db.get(added.id)
+       assert fetched is not None
+       assert fetched.name == "hello"
+
+   def test_search(temp_db: SnippetDB):
+       temp_db.add(Snippet(name="py_script", language="python", content="x=[11D[K
+content="x=1", tags=["py"]))
+       temp_db.add(Snippet(name="js_script", language="javascript", content[7D[K
+content="var x=1", tags=["js"]))
+       results = temp_db.search("py")
+       assert len(results) >= 1
+       assert results[0].name == "py_script"
+
+   def test_update_and_delete(temp_db: SnippetDB):
+       added = temp_db.add(Snippet(name="old", language="c", content="int x[1D[K
+x;", tags=[]))
+       added.name = "new"
+       updated = temp_db.update(added)
+       assert updated.name == "new"
+       assert temp_db.delete(added.id)
+       assert temp_db.get(added.id) is None
+   ```
+
+   **`README.md`**
+   Standard markdown with setup, usage examples.
+
+   Let's double-check constraints:
+   - Python 3.10+ type hints: Used `list[str]`, `Optional`, etc.
+   - argparse subcommands: add/list/get/edit/delete/search
+   - sqlite3, pytest: Used
+   - Structure matches exactly.
+   - DB schema: id, name, language, content, description, tags(JSON), creat[5D[K
+created_at, updated_at
+   - Output format: `===FILE: path ===` separators, only code.
+
+   One minor thing: `src/commands/list.py` might cause shadowing of builtin[7D[K
+builtin `list`. I'll keep the filename as `list.py` per prompt, but in `mai[4D[K
+`main.py` I'll import it carefully: `import src.commands.list as list_cmd`.[10D[K
+list_cmd`. That's fine.
+   Also, need to ensure `__init__.py` files are present? The prompt doesn't[7D[K
+doesn't list them, but Python packages need them. I'll skip adding them exp[3D[K
+explicitly unless necessary, but modern Python (3.3+) supports namespace pa[2D[K
+packages. I'll assume implicit namespace or add empty `__init__.py` if need[4D[K
+needed. The prompt says specific files, I'll stick to them. I'll add implic[6D[K
+implicit imports assuming `PYTHONPATH=.` or `src` is installed. To be safe,[5D[K
+safe, I'll make imports relative where possible, or just absolute from `src[4D[K
+`src`. I'll use `from src.models import Snippet` etc.
+
+   Let's refine imports to be robust:
+   In `src/database.py`: `from src.models import Snippet`
+   In `src/utils/formatters.py`: `from src.models import Snippet`
+   In `src/commands/*.py`: `from src.database import SnippetDB`, etc.
+   This works if run as `python -m src.main` or with `src` in path.
+
+   Check `pyproject.toml`: needs `[build-system]`? Not strictly required bu[2D[K
+but good practice. I'll keep it minimal.
+   Check `src/main.py`: argparse setup looks solid.
+   Check `src/commands/edit.py`: handles partial updates correctly.
+   Check `src/utils/config.py`: uses `Path.home() / ".snippet_manager" / "s[2D[K
+"snippets.db"`. Creates directory if needed? I'll add `DEFAULT_DB_PATH.pare[21D[K
+`DEFAULT_DB_PATH.parent.mkdir(parents=True, exist_ok=True)` in `get_db_path[12D[K
+`get_db_path()` or in `database.py` init. Better to handle in `database.py`[13D[K
+`database.py` init: `Path(self.db_path).parent.mkdir(parents=True, exist_ok[8D[K
+exist_ok=True)`.
+
+   Let's update `database.py` init to handle directory creation:
+   ```python
+   from pathlib import Path
+   # inside __init__:
+   Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
+   ```
+
+   Check `formatters.py`: `print_snippet_list` uses `len(s.tags) > 1` incor[5D[K
+incorrectly for truncation. I'll fix it:
+   ```python
+   tags_str = ", ".join(s.tags)
+   if len(tags_str) > 17:
+       tags_str = tags_str[:17] + "..."
+   ```
+
+   Check `models.py`: `tags: list[str]` is fine for 3.9+. 3.10+ supports it[2D[K
+it.
+   Check `database.py`: `json.loads(row[5])` might fail if empty string? Sc[2D[K
+Schema says `DEFAULT '[]'`, so it's fine. I'll handle potential errors grac[4D[K
+gracefully or keep it simple.
+
+   All looks good. I will generate the output exactly as requested.
+   Structure check:
+   ===FILE: pyproject.toml ===
+   ===FILE: README.md ===
+   ===FILE: src/models.py ===
+   ===FILE: src/utils/config.py ===
+   ===FILE: src/utils/formatters.py ===
+   ===FILE: src/database.py ===
+   ===FILE: src/commands/add.py ===
+   ===FILE: src/commands/list.py ===
+   ===FILE: src/commands/get.py ===
+   ===FILE: src/commands/edit.py ===
+   ===FILE: src/commands/delete.py ===
+   ===FILE: src/commands/search.py ===
+   ===FILE: src/main.py ===
+   ===FILE: tests/test_models.py ===
+   ===FILE: tests/test_database.py ===
+
+   I'll produce the code now. I'll make sure type hints are strict, argpars[7D[K
+argparse is correctly configured, and SQLite operations match the schema. I[1D[K
+I'll avoid extra fluff.
+   One detail: `argparse` subcommands require the command name to match. `l[2D[K
+`list` is fine.
+   I'll ensure all imports are correct. Since it's a monorepo style, I'll u[1D[K
+use absolute imports from `src`.
+   Ready. Output matches request. 
+   Self-Correction/Refinement during thought:
+   - `list.py` shadowing: I'll import it as `import src.commands.list as li[2D[K
+list_module` in main.py to be safe.
+   - `formatters.py` truncation logic fix.
+   - `database.py` `_init_db` uses `tags TEXT DEFAULT '[]'`. JSON storage i[1D[K
+is standard.
+   - `pyproject.toml` should specify `scripts` for CLI entry point? Not str[3D[K
+strictly required but good. I'll skip to keep it minimal as requested.
+   - I'll add `__init__.py` files? The prompt didn't ask for them, and Pyth[4D[K
+Python 3.3+ supports implicit namespace packages. I'll stick to exact files[5D[K
+files requested.
+   - I'll ensure type hints use `typing` module where needed for compatibil[10D[K
+compatibility, though `list[str]` is fine for 3.10+.
+   - All good.
+
+   Generating output. 
+   Structure of output:
+   ===FILE: pyproject.toml ===
+   [code]
+   ===FILE: README.md ===
+   [code]
+   ...
+   Only code, no explanations.
+   Proceeds. 
+   *Self-Correction/Verification during generation prep*:
+   - `src/commands/list.py` -> I'll name it exactly `list.py`.
+   - `main.py` -> `from src.commands import add, list as list_cmd, get, edi[3D[K
+edit, delete, search`
+   - `formatters.py` -> `from src.models import Snippet`
+   - `database.py` -> `from src.models import Snippet`, `from src.utils.con[13D[K
+src.utils.config import get_db_path`
+   - `config.py` -> `from pathlib import Path`, `DEFAULT_DB_PATH = Path.hom[8D[K
+Path.home() / ".snippet_manager" / "snippets.db"`
+   - `models.py` -> `from dataclasses import dataclass, field`, `from datet[5D[K
+datetime import datetime`, `from typing import Optional`
+   - `test_models.py` & `test_database.py` -> standard pytest
+   - All type hints compliant with 3.10+.
+   - SQLite schema matches exactly.
+   - Argparse subcommands match exactly.
+   - Output format strictly followed.
+
+   One minor point: `argparse` `list` command might conflict with builtin, [K
+but `subparsers.add_parser("list", ...)` works fine. The module name `list.[6D[K
+`list.py` is fine.
+   I will generate the code now. 
+   Output matches exactly. 
+   Proceeds. 
+   [Output Generation] -> *See response.* 
+   *(Note: I'll make sure the code is production-ready, with proper error h[1D[K
+handling and type hints as requested.)* 
+   All checks passed. Output generation. 
+   `===FILE: pyproject.toml ===` ... etc.
+   *(Done.)*
+...done thinking.
+
+===FILE: pyproject.toml ===
+[project]
+name = "snippet-cli"
+version = "0.1.0"
+description = "A CLI code snippet manager"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+===FILE: README.md ===
+# CLI Code Snippet Manager
+
+A lightweight Python CLI tool for managing code snippets using SQLite.
+
+## Features
+- Add, list, get, edit, delete, and search code snippets
+- JSON-based tag storage
+- Type-safe models with Python 3.10+ hints
+- SQLite backend with full CRUD support
+
+## Installation
+```bash
+pip install -e ".[dev]"
+```
+
+## Usage
+```bash
+python -m src.main add -n "hello" -l python -c "print('hi')" -t "basics,gre[11D[K
+"basics,greeting"
+python -m src.main list
+python -m src.main get 1
+python -m src.main edit 1 -n "updated_hello" -t "updated"
+python -m src.main delete 1
+python -m src.main search "print"
+```
+===FILE: src/models.py ===
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Optional, Any
+
+@dataclass
+class Snippet:
+    id: Optional[int] = None
+    name: str = ""
+    language: str = ""
+    content: str = ""
+    description: str = ""
+    tags: list[str] = field(default_factory=list)
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "id": self.id,
+            "name": self.name,
+            "language": self.language,
+            "content": self.content,
+            "description": self.description,
+            "tags": self.tags,
+            "created_at": self.created_at.isoformat() if self.created_at el[2D[K
+else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at el[2D[K
+else None,
+        }
+===FILE: src/utils/config.py ===
+from pathlib import Path
+
+DEFAULT_DB_PATH = Path.home() / ".snippet_manager" / "snippets.db"
+
+def get_db_path() -> str:
+    return str(DEFAULT_DB_PATH)
+===FILE: src/utils/formatters.py ===
+from src.models import Snippet
+from typing import Iterable
+
+def print_snippet(snippet: Snippet) -> None:
+    print(f"ID: {snippet.id}")
+    print(f"Name: {snippet.name}")
+    print(f"Language: {snippet.language}")
+    print(f"Description: {snippet.description}")
+    print(f"Tags: {', '.join(snippet.tags) if snippet.tags else 'None'}")
+    print(f"Created: {snippet.created_at}")
+    print(f"Updated: {snippet.updated_at}")
+    print("-" * 40)
+    print(snippet.content)
+    print("=" * 40)
+
+def print_snippet_list(snippets: Iterable[Snippet]) -> None:
+    if not snippets:
+        print("No snippets found.")
+        return
+    print(f"{'ID':<5} {'Name':<15} {'Language':<10} {'Tags':<20} {'Updated'[10D[K
+{'Updated'}")
+    print("-" * 65)
+    for s in snippets:
+        tags_str = ", ".join(s.tags)
+        if len(tags_str) > 17:
+            tags_str = tags_str[:17] + "..."
+        print(f"{s.id:<5} {s.name:<15} {s.language:<10} {tags_str:<20} {s.u[4D[K
+{s.updated_at}")
+===FILE: src/database.py ===
+import sqlite3
+import json
+from datetime import datetime
+from pathlib import Path
+from typing import List, Optional
+from src.models import Snippet
+from src.utils.config import get_db_path
+
+class SnippetDB:
+    def __init__(self, db_path: Optional[str] = None) -> None:
+        self.db_path = db_path or get_db_path()
+        Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
+        self.conn = sqlite3.connect(self.db_path)
+        self._init_db()
+
+    def _init_db(self) -> None:
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS snippets (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                language TEXT NOT NULL,
+                content TEXT NOT NULL,
+                description TEXT DEFAULT '',
+                tags TEXT DEFAULT '[]',
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        """)
+        self.conn.commit()
+
+    def _row_to_snippet(self, row: tuple) -> Snippet:
+        return Snippet(
+            id=row[0],
+            name=row[1],
+            language=row[2],
+            content=row[3],
+            description=row[4],
+            tags=json.loads(row[5]),
+            created_at=datetime.fromisoformat(row[6]),
+            updated_at=datetime.fromisoformat(row[7])
+        )
+
+    def add(self, snippet: Snippet) -> Snippet:
+        now = datetime.now().isoformat()
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            INSERT INTO snippets (name, language, content, description, tag[3D[K
+tags, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (snippet.name, snippet.language, snippet.content, snippet.desc[12D[K
+snippet.description,
+              json.dumps(snippet.tags), now, now))
+        self.conn.commit()
+        snippet.id = cursor.lastrowid
+        snippet.created_at = datetime.fromisoformat(now)
+        snippet.updated_at = datetime.fromisoformat(now)
+        return snippet
+
+    def list_all(self) -> List[Snippet]:
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM snippets ORDER BY updated_at DESC")
+        return [self._row_to_snippet(row) for row in cursor.fetchall()]
+
+    def get(self, snippet_id: int) -> Optional[Snippet]:
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT * FROM snippets WHERE id = ?", (snippet_id,)[13D[K
+(snippet_id,))
+        row = cursor.fetchone()
+        return self._row_to_snippet(row) if row else None
+
+    def update(self, snippet: Snippet) -> Optional[Snippet]:
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            UPDATE snippets SET name=?, language=?, content=?, description=[12D[K
+description=?, tags=?, updated_at=?
+            WHERE id=?
+        """, (snippet.name, snippet.language, snippet.content, snippet.desc[12D[K
+snippet.description,
+              json.dumps(snippet.tags), datetime.now().isoformat(), snippet[7D[K
+snippet.id))
+        self.conn.commit()
+        return self.get(snippet.id)
+
+    def delete(self, snippet_id: int) -> bool:
+        cursor = self.conn.cursor()
+        cursor.execute("DELETE FROM snippets WHERE id = ?", (snippet_id,))
+        self.conn.commit()
+        return cursor.rowcount > 0
+
+    def search(self, query: str) -> List[Snippet]:
+        cursor = self.conn.cursor()
+        like_pattern = f"%{query}%"
+        cursor.execute("""
+            SELECT * FROM snippets
+            WHERE name LIKE ? OR language LIKE ? OR content LIKE ? OR descr[5D[K
+description LIKE ?
+            ORDER BY updated_at DESC
+        """, (like_pattern, like_pattern, like_pattern, like_pattern))
+        return [self._row_to_snippet(row) for row in cursor.fetchall()]
+
+    def close(self) -> None:
+        self.conn.close()
+===FILE: src/commands/add.py ===
+from src.models import Snippet
+from src.database import SnippetDB
+
+def run(args) -> None:
+    snippet = Snippet(
+        name=args.name,
+        language=args.language,
+        content=args.content,
+        description=args.description or "",
+        tags=args.tags.split(",") if args.tags else []
+    )
+    db = SnippetDB()
+    try:
+        added = db.add(snippet)
+        print(f"Snippet added successfully! ID: {added.id}")
+    finally:
+        db.close()
+===FILE: src/commands/list.py ===
+from src.database import SnippetDB
+from src.utils.formatters import print_snippet_list
+
+def run(args) -> None:
+    db = SnippetDB()
+    try:
+        snippets = db.list_all()
+        print_snippet_list(snippets)
+    finally:
+        db.close()
+===FILE: src/commands/get.py ===
+from src.database import SnippetDB
+from src.utils.formatters import print_snippet
+
+def run(args) -> None:
+    db = SnippetDB()
+    try:
+        snippet = db.get(args.id)
+        if snippet:
+            print_snippet(snippet)
+        else:
+            print(f"Snippet with ID {args.id} not found.")
+    finally:
+        db.close()
+===FILE: src/commands/edit.py ===
+from src.database import SnippetDB
+from src.utils.formatters import print_snippet
+
+def run(args) -> None:
+    db = SnippetDB()
+    try:
+        snippet = db.get(args.id)
+        if not snippet:
+            print(f"Snippet with ID {args.id} not found.")
+            return
+
+        if args.name is not None:
+            snippet.name = args.name
+        if args.language is not None:
+            snippet.language = args.language
+        if args.content is not None:
+            snippet.content = args.content
+        if args.description is not None:
+            snippet.description = args.description
+        if args.tags is not None:
+            snippet.tags = args.tags.split(",")
+
+        updated = db.update(snippet)
+        if updated:
+            print(f"Snippet updated successfully! ID: {updated.id}")
+            print_snippet(updated)
+    finally:
+        db.close()
+===FILE: src/commands/delete.py ===
+from src.database import SnippetDB
+
+def run(args) -> None:
+    db = SnippetDB()
+    try:
+        success = db.delete(args.id)
+        if success:
+            print(f"Snippet {args.id} deleted successfully.")
+        else:
+            print(f"Snippet with ID {args.id} not found.")
+    finally:
+        db.close()
+===FILE: src/commands/search.py ===
+from src.database import SnippetDB
+from src.utils.formatters import print_snippet_list
+
+def run(args) -> None:
+    db = SnippetDB()
+    try:
+        results = db.search(args.query)
+        print_snippet_list(results)
+    finally:
+        db.close()
+===FILE: src/main.py ===
+import argparse
+import sys
+from src.commands import add, list as list_cmd, get, edit, delete, search
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="CLI Code Snippet Manager"[8D[K
+Manager")
+    subparsers = parser.add_subparsers(dest="command", help="Available comm[4D[K
+commands")
+
+    add_parser = subparsers.add_parser("add", help="Add a new snippet")
+    add_parser.add_argument("--name", "-n", required=True, help="Snippet na[2D[K
+name")
+    add_parser.add_argument("--language", "-l", required=True, help="Progra[12D[K
+help="Programming language")
+    add_parser.add_argument("--content", "-c", required=True, help="Code co[2D[K
+content")
+    add_parser.add_argument("--description", "-d", default="", help="Descri[12D[K
+help="Description")
+    add_parser.add_argument("--tags", "-t", default="", help="Comma-separat[19D[K
+help="Comma-separated tags")
+
+    subparsers.add_parser("list", help="List all snippets")
+
+    get_parser = subparsers.add_parser("get", help="Get a snippet by ID")
+    get_parser.add_argument("id", type=int, help="Snippet ID")
+
+    edit_parser = subparsers.add_parser("edit", help="Edit a snippet")
+    edit_parser.add_argument("id", type=int, help="Snippet ID")
+    edit_parser.add_argument("--name", "-n", help="New name")
+    edit_parser.add_argument("--language", "-l", help="New language")
+    edit_parser.add_argument("--content", "-c", help="New content")
+    edit_parser.add_argument("--description", "-d", help="New description")[13D[K
+description")
+    edit_parser.add_argument("--tags", "-t", help="New comma-s[7D[K
+comma-separated tags")
+
+    delete_parser = subparsers.add_parser("delete", help="Delete a snippet"[8D[K
+snippet")
+    delete_parser.add_argument("id", type=int, help="Snippet ID")
+
+    search_parser = subparsers.add_parser("search", help="Search snippets")[10D[K
+snippets")
+    search_parser.add_argument("query", help="Search query")
+
+    args = parser.parse_args()
+
+    if args.command is None:
+        parser.print_help()
+        sys.exit(1)
+
+    commands = {
+        "add": add.run,
+        "list": list_cmd.run,
+        "get": get.run,
+        "edit": edit.run,
+        "delete": delete.run,
+        "search": search.run,
+    }
+
+    try:
+        commands[args.command](args)
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
+===FILE: tests/test_models.py ===
+import pytest
+from src.models import Snippet
+from datetime import datetime
+
+def test_snippet_creation():
+    snippet = Snippet(name="test", language="python", content="print('hi')"[21D[K
+content="print('hi')")
+    assert snippet.name == "test"
+    assert snippet.tags == []
+    assert snippet.id is None
+
+def test_snippet_to_dict():
+    snippet = Snippet(id=1, name="test", language="python", content="code",[15D[K
+content="code", tags=["a", "b"])
+    d = snippet.to_dict()
+    assert d["name"] == "test"
+    assert d["tags"] == ["a", "b"]
+    assert d["created_at"] is None
+
+def test_snippet_with_timestamps():
+    now = datetime.now()
+    snippet = Snippet(id=2, name="ts_test", language="js", content="console[16D[K
+content="console.log()", created_at=now, updated_at=now)
+    assert snippet.created_at == now
+    assert snippet.updated_at == now
+    assert snippet.to_dict()["created_at"] == now.isoformat()
+===FILE: tests/test_database.py ===
+import pytest
+import os
+import tempfile
+from src.database import SnippetDB
+from src.models import Snippet
+
+@pytest.fixture
+def temp_db():
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".db") as f:
+        path = f.name
+    db = SnippetDB(path)
+    yield db
+    db.close()
+    os.unlink(path)
+
+def test_add_and_get(temp_db: SnippetDB):
+    snippet = Snippet(name="hello", language="bash", content="echo hi", tag[3D[K
+tags=["test"])
+    added = temp_db.add(snippet)
+    assert added.id is not None
+    fetched = temp_db.get(added.id)
+    assert fetched is not None
+    assert fetched.name == "hello"
+    assert fetched.tags == ["test"]
+
+def test_search(temp_db: SnippetDB):
+    temp_db.add(Snippet(name="py_script", language="python", content="x=1",[14D[K
+content="x=1", tags=["py"]))
+    temp_db.add(Snippet(name="js_script", language="javascript", content="v[10D[K
+content="var x=1", tags=["js"]))
+    results = temp_db.search("py")
+    assert len(results) >= 1
+    assert results[0].name == "py_script"
+
+def test_update_and_delete(temp_db: SnippetDB):
+    added = temp_db.add(Snippet(name="old", language="c", content="int x;",[4D[K
+x;", tags=[]))
+    added.name = "new"
+    updated = temp_db.update(added)
+    assert updated.name == "new"
+    assert temp_db.delete(added.id)
+    assert temp_db.get(added.id) is None
+
+def test_list_all(temp_db: SnippetDB):
+    assert temp_db.list_all() == []
+    temp_db.add(Snippet(name="a", language="py", content="a"))
+    temp_db.add(Snippet(name="b", language="js", content="b"))
+    assert len(temp_db.list_all()) == 2
+

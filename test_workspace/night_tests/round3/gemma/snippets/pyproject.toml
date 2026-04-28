@@ -1,0 +1,13 @@
+[project]
+name = "py-replace"
+version = "0.1.0"
+description = "A simple CLI tool to search and replace text in files"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.scripts]
+py-replace = "py_replace.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"

@@ -1,0 +1,7 @@
+runnable=no
+tests_passed=
+tests_failed=
+qwen3.6:27b-q4_K_M=qwen3.6:27b-q4_K_M
+project=cli_snippets
+duration=1832
+timestamp=20260428_025716

@@ -458,3 +458,48 @@ flowchart TD
 | `/security-review` | 安全扫描（硬编码密码、SQL注入、shell注入等） |
 | `/simplify` | 代码重构（重复代码、函数过长等） |
 | `/init` | 初始化 CLAUDE.md 项目文档 |
+
+---
+
+## 外部记忆系统 - Layer 1 实现计划
+
+> 基于 Codex 审查反馈，采用战略捷径：最小化内存接口 + 模拟嵌入，真实向量搜索延后至 Layer 3
+
+**架构决策：**
+1. 最小化内存接口优先于存储和嵌入
+2. 使用模拟嵌入用于 MVP，真实 Ollama 嵌入延后
+3. 文件追加存储（无索引），后期迁移到向量数据库
+
+**实现范围（Layer 1）：**
+- ✅ 内存接口：`remember()` 和 `recall()` 方法
+- ✅ 内存 Schema：会话元数据捕获（文件、标签、摘要）
+- ✅ 追加存储：`memory/sessions/` 下的 JSON 文件
+- ✅ `/search` CLI 命令（使用模拟嵌入）
+- ✅ 自动捕获：在 `AgentEngine` 的 `task_complete` 阶段钩入
+
+**不在 Layer 1 范围内：**
+- ❌ ChromaDB / 向量数据库（延后至 Layer 3）
+- ❌ 真实 Ollama 嵌入生成（延后）
+- ❌ 记忆清理和过期策略（延后）
+- ❌ 语义相似度搜索（延后）
+
+**文件变更：**
+| 文件 | 操作 |
+|------|------|
+| `memory/state_manager.py` | 扩展 richer metadata + retrieval API |
+| `memory/embedding_store.py` | 新建（模拟嵌入 + 文本回退） |
+| `memory/external_memory.py` | 增强 auto-capture |
+| `agent/engine.py` | 接入 auto-capture 钩子 |
+| `cli/michael.py` | 新增 `/search` 命令 |
+| `utils/model_provider.py` | 预留 `get_embeddings()` 接口 |
+
+**测试计划：**
+- `tests/test_memory_interface.py` - 内存接口 + 模拟嵌入
+- `tests/test_session_capture.py` - 会话元数据捕获
+- `tests/test_search_flow.py` - /search 命令流程
+
+**风险缓解：**
+- 嵌入失败 → 文本关键词搜索回退
+- 存储损坏 → 从会话日志重建
+
+*最后更新: 2026-04-27*

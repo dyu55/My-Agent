@@ -1,0 +1,7 @@
+runnable=no
+tests_passed=
+tests_failed=
+gemma4:31b=gemma4:31b
+project=markdown_blog
+duration=707
+timestamp=20260428_025716

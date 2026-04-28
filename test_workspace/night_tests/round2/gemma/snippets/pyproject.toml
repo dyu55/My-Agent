@@ -1,0 +1,10 @@
+[project]
+name = "disk_analyzer"
+version = "0.1.0"
+description = "A tool to analyze disk usage of directories"
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"

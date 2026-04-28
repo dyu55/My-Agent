@@ -93,6 +93,91 @@ class ToolExecutor:
         self._search_tools = SearchTools(workspace_path)
         self._git_tools = GitTools(workspace_path)
 
+        # Lazy-loaded new tools
+        self._test_tools = None
+        self._quality_tools = None
+        self._dependency_tools = None
+        self._deploy_tools = None
+
+    def _get_test_tools(self):
+        """Lazy-load test tools."""
+        if self._test_tools is None:
+            from .tools.test_tools import TestTools
+            self._test_tools = TestTools(self.workspace)
+        return self._test_tools
+
+    def _get_quality_tools(self):
+        """Lazy-load quality tools."""
+        if self._quality_tools is None:
+            from .tools.quality_tools import QualityTools
+            self._quality_tools = QualityTools(self.workspace)
+        return self._quality_tools
+
+    def _get_dependency_tools(self):
+        """Lazy-load dependency tools."""
+        if self._dependency_tools is None:
+            from .tools.dependency_tools import DependencyTools
+            self._dependency_tools = DependencyTools(self.workspace)
+        return self._dependency_tools
+
+    def _get_deploy_tools(self):
+        """Lazy-load deploy tools."""
+        if self._deploy_tools is None:
+            from .tools.deploy_tools import DeployTools
+            self._deploy_tools = DeployTools(self.workspace)
+        return self._deploy_tools
+
+    def _add_new_tool_handlers(self, handlers: dict) -> None:
+        """Add new tool handlers to the dispatch map."""
+        test = self._get_test_tools()
+        quality = self._get_quality_tools()
+        deps = self._get_dependency_tools()
+        deploy = self._get_deploy_tools()
+
+        # Test tools
+        handlers["discover_tests"] = lambda: ToolResult.ok(
+            "\n".join(test.discover_tests())
+        )
+        handlers["run_tests"] = lambda: ToolResult.from_result(
+            test.run_tests(), stringify=True
+        )
+
+        # Quality tools
+        handlers["lint"] = lambda: ToolResult.from_result(
+            quality.lint(), stringify=True
+        )
+        handlers["type_check"] = lambda: ToolResult.from_result(
+            quality.type_check(), stringify=True
+        )
+        handlers["security_scan"] = lambda: ToolResult.from_result(
+            quality.security_scan(), stringify=True
+        )
+        handlers["complexity"] = lambda: ToolResult.from_result(
+            quality.complexity(), stringify=True
+        )
+
+        # Dependency tools
+        handlers["analyze_imports"] = lambda: ToolResult.ok(
+            "\n".join(deps.analyze_imports())
+        )
+        handlers["generate_requirements"] = lambda: ToolResult.ok(
+            deps.generate_requirements()
+        )
+
+        # Deploy tools
+        handlers["gen_dockerfile"] = lambda: ToolResult.ok(
+            deploy.dockerfile_gen()
+        )
+        handlers["gen_compose"] = lambda: ToolResult.ok(
+            deploy.compose_gen()
+        )
+        handlers["gen_ci"] = lambda: ToolResult.ok(
+            deploy.github_actions_gen()
+        )
+        handlers["deploy_checklist"] = lambda: ToolResult.ok(
+            deploy.deploy_checklist()
+        )
+
     def execute_action(self, action: Action) -> ExecutionResult:
         """
         Execute a single action and return the result.
@@ -184,6 +269,10 @@ class ToolExecutor:
         handlers.update(exec_handlers)
         handlers.update(search_handlers)
         handlers.update(git_handlers)
+
+        # Add new tool handlers (lazy import)
+        self._add_new_tool_handlers(handlers)
+
         handlers["debug"] = lambda: ToolResult.ok(f"[DEBUG]\n{action.content or 'No content'}\n[/DEBUG]")
         handlers["finish"] = lambda: ToolResult.ok("Task completed successfully")
 

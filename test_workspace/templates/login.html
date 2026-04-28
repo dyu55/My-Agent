@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>用户登录</title>
+    <link rel="stylesheet" href="static/css/style.css">
+</head>
+<body>
+    <div class="login-container">
+        <form id="login-form">
+            <h2>用户登录</h2>
+            <div class="form-group">
+                <label for="username">用户名:</label>
+                <input type="text" id="username" name="username" required>
+            </div>
+            <div class="form-group">
+                <label for="password">密码:</label>
+                <input type="password" id="password" name="password" required>
+            </div>
+            <button type="submit" id="login-btn">登录</button>
+            <p class="register-link">没有账号？<a href="/register">立即注册</a></p>
+            <p class="message" id="message"></p>
+        </form>
+    </div>
+
+    <script src="static/js/script.js"></script>
+</body>
+</html>

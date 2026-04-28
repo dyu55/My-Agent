@@ -245,28 +245,28 @@ class ResultReflector:
         if not self.llm:
             return self.reflect(action_command, execution_output, True)
 
-        prompt = f"""你是一个代码调试专家。分析以下执行失败的情况：
+        prompt = f"""You are a code debugging expert. Analyze this execution failure:
 
-## 任务
+## Task
 {task_description}
 
-## 失败的操作
+## Failed Operation
 {action_command}
 
-## 执行输出
+## Execution Output
 {execution_output}
 
-## 最近的操作历史
+## Recent Operation History
 {chr(10).join(execution_history[-5:])}
 
-## 输出格式
-请返回一个 JSON 对象：
+## Output Format
+Return a JSON object:
 {{
-  "analysis": "对错误的深入分析",
+  "analysis": "In-depth analysis of the error",
   "error_type": "syntax/logic/tool/dependency/unknown",
-  "suggestion": "具体的修复建议",
+  "suggestion": "Specific fix suggestion",
   "should_retry": true/false,
-  "alternative_approach": "如果 retry 为 false，描述替代方案"
+  "alternative_approach": "If retry is false, describe alternative approach"
 }}
 """
 

@@ -1,0 +1,11 @@
+toml
+[project]
+name = "text-replacer"
+version = "0.1.0"
+description = "A recursive text search and replace utility"
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"

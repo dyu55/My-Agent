@@ -84,7 +84,8 @@ class WikiStore:
     def add_entry(self, entry: WikiEntry) -> str:
         """Add a new wiki entry."""
         if not entry.id:
-            entry.id = f"entry_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            # 使用微秒确保唯一性
+            entry.id = f"entry_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
         if not entry.created_at:
             entry.created_at = datetime.now().isoformat()
         entry.updated_at = datetime.now().isoformat()
@@ -300,16 +301,67 @@ class LLMWiki:
 
     def _simple_tags(self, content: str) -> list[str]:
         """Simple tag generation without LLM."""
-        common_tags = {
-            "python", "javascript", "typescript", "react", "vue", "node",
-            "api", "database", "config", "test", "bug", "feature",
-            "refactor", "optimize", "deploy", "docker", "git",
-            "frontend", "backend", "fullstack", "mobile", "web",
-            "llm", "ai", "agent", "openai", "ollama",
+        # English keywords
+        common_tags_en = {
+            # Programming languages
+            "python", "javascript", "typescript", "java", "go", "rust", "c++", "swift", "kotlin",
+            # Frameworks
+            "react", "vue", "angular", "node", "django", "flask", "fastapi", "nextjs", "flutter",
+            # Auth & Security
+            "auth", "login", "logout", "register", "jwt", "oauth", "password", "session", "token", "security",
+            # Data & APIs
+            "api", "database", "sql", "mongodb", "redis", "cache", "rest", "graphql", "grpc",
+            # DevOps
+            "docker", "kubernetes", "ci", "cd", "deploy", "devops", "cloud", "aws", "gcp", "azure",
+            # Version Control
+            "git", "github", "branch", "merge", "commit",
+            # General Development
+            "api", "database", "config", "test", "bug", "feature", "refactor", "optimize",
+            "frontend", "backend", "fullstack", "mobile", "web", "server", "client",
+            "llm", "ai", "agent", "openai", "ollama", "model", "prompt",
+            # User related
+            "user", "profile", "settings", "admin", "permission", "role",
+        }
+
+        # Chinese keywords (for Chinese content)
+        common_tags_zh = {
+            # Auth & Security
+            "登录", "注册", "登出", "密码", "认证", "授权", "会话", "token",
+            "身份验证", "auth", "authenticate", "authorization",
+            # Features
+            "用户", "资料", "设置", "权限", "角色", "管理员",
+            # Development
+            "前端", "后端", "全栈", "移动", "网页", "服务器", "客户端",
+            "功能", "特性", "模块", "组件", "接口", "API", "数据库",
+            "测试", "bug", "重构", "优化", "部署",
+            "登录功能", "注册功能", "密码重置", "用户资料",
+        }
+
+        # Chinese to English tag mapping
+        zh_to_en = {
+            # Auth & Security
+            "登录": "auth", "登出": "auth", "注册": "auth", "密码": "auth",
+            "认证": "auth", "授权": "auth", "会话": "auth", "身份验证": "auth",
+            "登录功能": "auth", "注册功能": "auth", "密码重置": "auth",
+            # Features
+            "用户": "user", "资料": "user", "用户资料": "user",
+            "设置": "settings", "权限": "permission", "角色": "role", "管理员": "admin",
+            # Development
+            "前端": "frontend", "后端": "backend", "全栈": "fullstack",
+            "移动": "mobile", "网页": "web", "功能": "feature",
         }
 
         content_lower = content.lower()
-        found = [t for t in common_tags if t in content_lower]
+
+        # Find English tags directly
+        found_en = [t for t in common_tags_en if t in content_lower]
+
+        # Find Chinese tags and convert to English
+        found_zh = [t for t in common_tags_zh if t in content_lower]
+        found_from_zh = [zh_to_en.get(t) for t in found_zh if t in zh_to_en]
+
+        # Combine and deduplicate
+        found = list(set(found_en + found_from_zh))
         return found[:5] if found else ["general"]
 
     def create_entry_from_task(self, task_description: str, result: str, llm_client: Any = None) -> str:

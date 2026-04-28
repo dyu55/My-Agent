@@ -1,0 +1,90 @@
+[02:57:16] 
+[02:57:16] ==========================================
+[02:57:16] ROUND 1: cli_todo
+[02:57:16] ==========================================
+[02:57:16] ==========================================
+[02:57:16] Testing qwen3.6:27b-q4_K_M on: cli_todo
+[02:57:16] ==========================================
+[03:34:36] qwen3.6:27b-q4_K_M | cli_todo | Duration: 2240s | Tokens: 6917 | Response: 3361chars
+[03:34:36]   ✗ CLI failed to run
+[03:34:37]   Tests:  passed,  failed
+[03:34:47] ==========================================
+[03:34:47] Testing gemma4:31b on: cli_todo
+[03:34:47] ==========================================
+[03:43:36] gemma4:31b | cli_todo | Duration: 529s | Tokens: 1854 | Response: 3997chars
+[03:43:36]   ✗ CLI failed to run
+[03:43:37]   Tests:  passed,  failed
+[03:43:37] Round 1 completed
+[03:44:07] 
+[03:44:07] ==========================================
+[03:44:07] ROUND 2: cli_snippets
+[03:44:07] ==========================================
+[03:44:07] ==========================================
+[03:44:07] Testing qwen3.6:27b-q4_K_M on: cli_snippets
+[03:44:07] ==========================================
+[04:14:39] qwen3.6:27b-q4_K_M | cli_snippets | Duration: 1832s | Tokens: 5622 | Response: 3805chars
+[04:14:39]   ✗ CLI failed to run
+[04:14:40]   Tests:  passed,  failed
+[04:14:50] ==========================================
+[04:14:50] Testing gemma4:31b on: cli_snippets
+[04:14:50] ==========================================
+[04:25:55] gemma4:31b | cli_snippets | Duration: 665s | Tokens: 2315 | Response: 5407chars
+[04:25:55]   ✗ CLI failed to run
+[04:25:56]   Tests:  passed,  failed
+[04:25:56] Round 2 completed
+[04:26:26] 
+[04:26:26] ==========================================
+[04:26:26] ROUND 3: file_searcher
+[04:26:26] ==========================================
+[04:26:26] ==========================================
+[04:26:26] Testing qwen3.6:27b-q4_K_M on: file_searcher
+[04:26:26] ==========================================
+[04:55:08] qwen3.6:27b-q4_K_M | file_searcher | Duration: 1722s | Tokens: 5330 | Response: 3480chars
+[04:55:08]   ✗ CLI failed to run
+[04:55:09]   Tests:  passed,  failed
+[04:55:19] ==========================================
+[04:55:19] Testing gemma4:31b on: file_searcher
+[04:55:19] ==========================================
+[05:06:09] gemma4:31b | file_searcher | Duration: 650s | Tokens: 2245 | Response: 5321chars
+[05:06:09]   ✗ CLI failed to run
+[05:06:10]   Tests:  passed,  failed
+[05:06:10] Round 3 completed
+[05:06:40] 
+[05:06:40] ==========================================
+[05:06:40] ROUND 4: http_server
+[05:06:40] ==========================================
+[05:06:40] ==========================================
+[05:06:40] Testing qwen3.6:27b-q4_K_M on: http_server
+[05:06:40] ==========================================
+[05:39:20] qwen3.6:27b-q4_K_M | http_server | Duration: 1959s | Tokens: 6110 | Response: 4434chars
+[05:39:20]   ✗ CLI failed to run
+[05:39:20]   Tests:  passed,  failed
+[05:39:30] ==========================================
+[05:39:30] Testing gemma4:31b on: http_server
+[05:39:30] ==========================================
+[05:48:55] gemma4:31b | http_server | Duration: 565s | Tokens: 1949 | Response: 5384chars
+[05:48:55]   ✗ CLI failed to run
+[05:48:55]   Tests:  passed,  failed
+[05:48:55] Round 4 completed
+[05:49:25] 
+[05:49:25] ==========================================
+[05:49:25] ROUND 5: markdown_blog
+[05:49:25] ==========================================
+[05:49:25] ==========================================
+[05:49:25] Testing qwen3.6:27b-q4_K_M on: markdown_blog
+[05:49:25] ==========================================
+[06:23:37] qwen3.6:27b-q4_K_M | markdown_blog | Duration: 2052s | Tokens: 6348 | Response: 3202chars
+[06:23:37]   ✗ CLI failed to run
+[06:23:38]   Tests:  passed,  failed
+[06:23:48] ==========================================
+[06:23:48] Testing gemma4:31b on: markdown_blog
+[06:23:48] ==========================================
+[06:35:36] gemma4:31b | markdown_blog | Duration: 707s | Tokens: 2456 | Response: 5669chars
+[06:35:36]   ✗ CLI failed to run
+[06:35:36]   Tests:  passed,  failed
+[06:35:36] Round 5 completed
+[06:36:06] 
+[06:36:06] ==========================================
+[06:36:06] ALL TESTS COMPLETED
+[06:36:06] ==========================================
+[06:36:06] Test suite completed. Results saved to /Users/donglingyu/Documents/MyAgent/test_workspace/night_tests/results/
