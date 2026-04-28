@@ -1,4 +1,4 @@
-# Michael - Local Coding Agent
+# myAgent - Local Coding Agent
 
 > A coding agent that uses local 8B/9B models to autonomously develop complete projects. Inspired by Claude Code architecture.
 
@@ -23,22 +23,21 @@ cd My-Agent
 # Install dependencies
 pip install -r requirements.txt
 
-# Configure Ollama (or use other providers)
-export OLLAMA_HOST=http://192.168.0.124:11434
-export MODEL_NAME=gemma4:latest
+# Run
+python main.py --chat
 ```
 
 ### Usage
 
 ```bash
 # Start interactive CLI
-michael
+python main.py --chat
 
 # Execute single task
-michael "Create a TODO app"
+python main.py "Create a TODO app"
 
 # Specify model
-michael -m qwen2.5:9b
+python main.py --model qwen2.5:9b
 ```
 
 ## Interactive Mode
@@ -123,24 +122,10 @@ MyAgent/
 
 ## Configuration
 
-### Environment Variables
-
-```bash
-# Ollama
-OLLAMA_HOST=http://192.168.0.124:11434
-MODEL_NAME=gemma4:latest
-
-# Or rsxermu
-ACTIVE_PROVIDER=rsxermu
-RSXERMU_BASE_URL=https://rsxermu666.cn
-RSXERMU_API_KEY=your_key
-```
-
-### .env File
+Copy `.env.example` to `.env` and configure your provider:
 
 ```bash
 cp .env.example .env
-# Edit .env with your configuration
 ```
 
 ## Development
@@ -155,14 +140,6 @@ pytest tests/test_agent.py -v
 # Start dev CLI
 python main.py --chat
 ```
-
-## Recommended Models
-
-| Model | Parameters | Characteristics |
-|-------|------------|------------------|
-| gemma4:latest | 8B | Fast, fully on GPU |
-| gemma4:26b | 26B | Capable, partial RAM |
-| qwen2.5:9b | 9B | Chinese optimized |
 
 ## License
 
