@@ -1,41 +1,40 @@
-# MyAgent 路线图：构建自主Coding Agent
+# myAgent Roadmap: Building an Autonomous Coding Agent
 
-> 目标：用本地 8B/9B 小模型实现能够自主开发完整项目的 Coding Agent
-> 参考：Claude Code 开源代码架构
+> Goal: Build a coding agent that can autonomously develop complete projects using local 8B/9B models
+> Reference: Claude Code open-source architecture
 
 ---
 
-## 整体架构流程图
+## Overall Architecture
 
 ```mermaid
 flowchart TD
-    subgraph 用户层["用户层"]
-        A[用户输入任务]
+    subgraph UserLayer["User Layer"]
+        A[User Input Task]
     end
 
-    subgraph Agent核心["Agent 核心循环"]
-        B[任务解析]
-        C[任务规划 Plan]
-        D[执行 Action]
-        E[观察 Reflect]
-        F{任务完成?}
-        G[自我纠错 Revise]
-        H[验证 Verify]
+    subgraph AgentCore["Agent Core Loop"]
+        B[Task Parsing]
+        C[Task Planning]
+        D[Execute Action]
+        E[Observe Reflect]
+        F{Task Complete?}
+        G[Self-Correction]
+        H[Verify]
     end
 
-    subgraph 工具层["工具层 Tools"]
-        I1[文件操作]
-        I2[代码执行]
-        I3[搜索工具]
-        I4[Git操作]
-        I5[MCP工具]
-        I6[网络工具]
+    subgraph ToolLayer["Tool Layer"]
+        I1[File Operations]
+        I2[Code Execution]
+        I3[Search Tools]
+        I4[Git Operations]
+        I5[MCP Tools]
+        I6[Network Tools]
     end
 
-    subgraph 模型层["模型层"]
-        J1[Ollama本地]
-        J2[OpenAI兼容]
-        J3[rsxermu]
+    subgraph ModelLayer["Model Layer"]
+        J1[Ollama Local]
+        J2[OpenAI Compatible]
     end
 
     A --> B
@@ -44,153 +43,153 @@ flowchart TD
     D --> I1 & I2 & I3 & I4 & I5 & I6
     I1 & I2 & I3 & I4 & I5 & I6 --> E
     E --> F
-    F -- 否 --> G
+    F -- No --> G
     G --> C
-    F -- 是 --> H
-    H --> I[输出结果]
+    F -- Yes --> H
+    H --> I[Output Result]
 
-    D --> J1 & J2 & J3
+    D --> J1 & J2
 ```
 
 ---
 
-## Phase 1: 核心 Agent 架构增强
+## Phase 1: Core Agent Architecture Enhancement
 
-### 1.1 多轮规划循环 (Plan → Act → Reflect)
+### 1.1 Multi-Round Planning Loop (Plan → Act → Reflect)
 
 ```mermaid
 flowchart LR
-    subgraph Plan阶段["Plan 阶段"]
-        P1[分解任务]
-        P2[识别依赖]
-        P3[生成执行计划]
+    subgraph PlanPhase["Plan Phase"]
+        P1[Decompose Task]
+        P2[Identify Dependencies]
+        P3[Generate Execution Plan]
     end
 
-    subgraph Act阶段["Act 阶段"]
-        A1[选择工具]
-        A2[执行操作]
-        A3[获取结果]
+    subgraph ActPhase["Act Phase"]
+        A1[Select Tool]
+        A2[Execute Operation]
+        A3[Get Result]
     end
 
-    subgraph Reflect阶段["Reflect 阶段"]
-        R1[评估结果]
-        R2{成功?}
-        R3[总结经验]
+    subgraph ReflectPhase["Reflect Phase"]
+        R1[Evaluate Result]
+        R2{Success?}
+        R3[Summarize Experience]
     end
 
-    subgraph Revise阶段["Revise 阶段"]
-        V1[分析错误]
-        V2[调整策略]
-        V3[重新规划]
+    subgraph RevisePhase["Revise Phase"]
+        V1[Analyze Error]
+        V2[Adjust Strategy]
+        V3[Replan]
     end
 
     P1 --> P2 --> P3
     P3 --> A1 --> A2 --> A3
     A3 --> R1 --> R2
-    R2 -- 是 --> R3
-    R2 -- 否 --> V1 --> V2 --> V3
+    R2 -- Yes --> R3
+    R2 -- No --> V1 --> V2 --> V3
     V3 --> P1
 ```
 
-### 1.2 任务队列与子任务分解
+### 1.2 Task Queue and Subtask Decomposition
 
 ```mermaid
 flowchart TD
-    T1[主任务] --> T2[分解为子任务队列]
-    T2 --> T3[子任务 1]
-    T2 --> T4[子任务 2]
-    T2 --> T5[子任务 N]
+    T1[Main Task] --> T2[Decompose to Subtask Queue]
+    T2 --> T3[Subtask 1]
+    T2 --> T4[Subtask 2]
+    T2 --> T5[Subtask N]
 
-    T3 --> T3A[执行] --> T3B{完成?}
-    T4 --> T4A[执行] --> T4B{完成?}
-    T5 --> T5A[执行] --> T5B{完成?}
+    T3 --> T3A[Execute] --> T3B{Complete?}
+    T4 --> T4A[Execute] --> T4B{Complete?}
+    T5 --> T5A[Execute] --> T5B{Complete?}
 
-    T3B -- 否 --> E1[纠错] --> T3A
-    T4B -- 否 --> E2[纠错] --> T4A
-    T5B -- 否 --> E3[纠错] --> T5A
+    T3B -- No --> E1[Error Correction] --> T3A
+    T4B -- No --> E2[Error Correction] --> T4A
+    T5B -- No --> E3[Error Correction] --> T5A
 
-    T3B -- 是 --> C1[标记完成]
-    T4B -- 是 --> C2[标记完成]
-    T5B -- 是 --> C3[标记完成]
+    T3B -- Yes --> C1[Mark Complete]
+    T4B -- Yes --> C2[Mark Complete]
+    T5B -- Yes --> C3[Mark Complete]
 
-    C1 & C2 & C3 --> T6[验证整体]
-    T6 --> T7[交付结果]
+    C1 & C2 & C3 --> T6[Verify Overall]
+    T6 --> T7[Deliver Result]
 ```
 
-### 1.3 自我纠错机制
+### 1.3 Self-Correction Mechanism
 
 ```mermaid
 flowchart TD
-    E[执行失败] --> E1[错误分类]
-    E1 --> C1{语法错误?}
-    E1 --> C2{逻辑错误?}
-    E1 --> C3{工具错误?}
-    E1 --> C4{模型幻觉?}
+    E[Execution Failed] --> E1[Error Classification]
+    E1 --> C1{Syntax Error?}
+    E1 --> C2{Logic Error?}
+    E1 --> C3{Tool Error?}
+    E1 --> C4{Model Hallucination?}
 
-    C1 --> A1[修复语法]
-    C2 --> A2[重新设计逻辑]
-    C3 --> A3[检查工具参数]
-    C4 --> A4[验证假设]
+    C1 --> A1[Fix Syntax]
+    C2 --> A2[Redesign Logic]
+    C3 --> A3[Check Tool Parameters]
+    C4 --> A4[Verify Assumptions]
 
-    A1 --> R[重试]
+    A1 --> R[Retry]
     A2 --> R
     A3 --> R
     A4 --> R
     R --> E
 ```
 
-### 1.4 结构化工具调用
+### 1.4 Structured Tool Calling
 
 ```mermaid
 flowchart LR
-    subgraph LLM输出["LLM 结构化输出"]
+    subgraph LLMOutput["LLM Structured Output"]
         O1[JSON Schema]
-        O2[Tool Call格式]
+        O2[Tool Call Format]
     end
 
-    subgraph 验证["输入验证"]
-        V1[Pydantic验证]
-        V2[必需字段检查]
-        V3[类型检查]
+    subgraph Validation["Input Validation"]
+        V1[Pydantic Validation]
+        V2[Required Field Check]
+        V3[Type Check]
     end
 
-    subgraph 工具执行["工具执行"]
-        T1[路由到工具]
-        T2[执行操作]
-        T3[捕获结果]
+    subgraph ToolExecution["Tool Execution"]
+        T1[Route to Tool]
+        T2[Execute Operation]
+        T3[Capture Result]
     end
 
     O1 --> V1 --> V2 --> V3
     V3 --> T1 --> T2 --> T3
-    T3 --> E{执行成功?}
-    E -- 否 --> R[返回错误信息]
-    E -- 是 --> S[返回观测结果]
+    T3 --> E{Success?}
+    E -- No --> R[Return Error]
+    E -- Yes --> S[Return Observation]
 ```
 
 ---
 
-## Phase 2: Claude Code 核心功能
+## Phase 2: Claude Code Core Features
 
-### 2.1 MCP 集成架构
+### 2.1 MCP Integration Architecture
 
 ```mermaid
 flowchart TD
-    subgraph MCP生态["MCP 生态系统"]
+    subgraph MCPEcosystem["MCP Ecosystem"]
         M1[MCP Server 1]
         M2[MCP Server 2]
         M3[MCP Server N]
     end
 
-    subgraph MCP客户端["MCP Client"]
-        MC1[连接管理]
-        MC2[协议解析]
-        MC3[工具发现]
+    subgraph MCPClient["MCP Client"]
+        MC1[Connection Management]
+        MC2[Protocol Parsing]
+        MC3[Tool Discovery]
     end
 
-    subgraph 工具注册["工具注册"]
-        TR1[动态加载]
-        TR2[统一接口]
-        TR3[结果标准化]
+    subgraph ToolRegistry["Tool Registry"]
+        TR1[Dynamic Loading]
+        TR2[Unified Interface]
+        TR3[Result Standardization]
     end
 
     M1 & M2 & M3 --> MC1
@@ -198,109 +197,109 @@ flowchart TD
     MC3 --> TR1 --> TR2 --> TR3
 ```
 
-### 2.2 进程监控能力
+### 2.2 Process Monitoring
 
 ```mermaid
 flowchart TD
-    subgraph 监控触发["监控触发"]
-        W1[手动触发 /watch]
-        W2[自动触发]
+    subgraph MonitorTrigger["Monitor Trigger"]
+        W1[Manual Trigger /watch]
+        W2[Auto Trigger]
     end
 
-    subgraph 监控循环["监控循环"]
-        M1[检查进程状态]
-        M2[捕获输出]
-        M3[检测错误模式]
-        M4[记录日志]
+    subgraph MonitorLoop["Monitor Loop"]
+        M1[Check Process Status]
+        M2[Capture Output]
+        M3[Detect Error Patterns]
+        M4[Log]
     end
 
-    subgraph 响应处理["响应处理"]
-        R1{发现问题?}
-        R2[通知Agent]
-        R3[建议修复]
+    subgraph ResponseHandling["Response Handling"]
+        R1{Problem Found?}
+        R2[Notify Agent]
+        R3[Suggest Fix]
     end
 
     W1 & W2 --> M1 --> M2 --> M3 --> M4
     M4 --> R1
-    R1 -- 是 --> R2 --> R3
-    R1 -- 否 --> 继续
+    R1 -- Yes --> R2 --> R3
+    R1 -- No --> Continue
 ```
 
 ---
 
-## Phase 3: 小模型适配
+## Phase 3: Small Model Adaptation
 
-### 3.1 Chain-of-Thought 提示模板
+### 3.1 Chain-of-Thought Prompt Templates
 
 ```mermaid
 flowchart LR
     subgraph FewShot["Few-shot Examples"]
-        F1[示例1: 任务分解]
-        F2[示例2: 工具选择]
-        F3[示例3: 错误恢复]
+        F1[Example 1: Task Decomposition]
+        F2[Example 2: Tool Selection]
+        F3[Example 3: Error Recovery]
     end
 
-    subgraph CoT模板["Chain-of-Thought"]
-        C1[问题理解]
-        C2[分解步骤]
-        C3[工具规划]
-        C4[执行验证]
+    subgraph CoTTemplate["Chain-of-Thought"]
+        C1[Problem Understanding]
+        C2[Decompose Steps]
+        C3[Tool Planning]
+        C4[Execute Verify]
     end
 
     F1 & F2 & F3 --> C1 --> C2 --> C3 --> C4
 ```
 
-### 3.2 降级与回退策略
+### 3.2 Fallback Strategies
 
 ```mermaid
 flowchart TD
-    subgraph 主要流程["主要流程"]
-        M1[结构化JSON输出]
-        M2[Pydantic验证]
+    subgraph MainFlow["Main Flow"]
+        M1[Structured JSON Output]
+        M2[Pydantic Validation]
     end
 
-    subgraph 降级1["降级策略 1"]
-        D1[正则提取]
-        D1T[尝试提取JSON]
+    subgraph Fallback1["Fallback 1"]
+        D1[Regex Extraction]
+        D1T[Try Extract JSON]
     end
 
-    subgraph 降级2["降级策略 2"]
-        D2[简化指令]
-        D2T[使用更简单的提示]
+    subgraph Fallback2["Fallback 2"]
+        D2[Simplified Instructions]
+        D2T[Use Simpler Prompt]
     end
 
-    subgraph 降级3["降级策略 3"]
-        D3[默认操作]
-        D3T[执行安全默认操作]
+    subgraph Fallback3["Fallback 3"]
+        D3[Default Operation]
+        D3T[Execute Safe Default]
     end
 
-    M2 -- 失败 --> D1 --> D1T
-    D1T -- 失败 --> D2 --> D2T
-    D2T -- 失败 --> D3 --> D3T
+    M2 -- Failed --> D1 --> D1T
+    D1T -- Failed --> D2 --> D2T
+    D2T -- Failed --> D3 --> D3T
 ```
 
 ---
 
-## Phase 4: 验证与迭代
+## Phase 4: Validation and Iteration
 
 ```mermaid
 flowchart TD
-    subgraph 测试分层["测试分层"]
-        T1[单元测试]
-        T2[集成测试]
-        T3[E2E测试]
+    subgraph TestLayers["Test Layers"]
+        T1[Unit Tests]
+        T2[Integration Tests]
+        T3[E2E Tests]
     end
 
-    subgraph 项目验证["项目级验证"]
-        P1[功能完整性]
-        P2[代码质量]
-        P3[可运行性]
+    subgraph ProjectValidation["Project Validation"]
+        P1[Functionality Completeness]
+        P2[Code Quality]
+        P3[Runnability]
     end
 
-    subgraph 基准测试["性能基准"]
-        B1[执行时间]
-        B2[工具调用次数]
-        B3[成功率]
+    subgraph Benchmark["Performance Benchmark"]
+        B1[Execution Time]
+        B2[Tool Call Count]
+        B3[Success Rate]
     end
 
     T1 & T2 & T3 --> P1 & P2 & P3
@@ -309,134 +308,139 @@ flowchart TD
 
 ---
 
-## 实现优先级
+## Implementation Priority
 
-| 优先级 | 阶段 | 任务 | 预计时间 |
-|--------|------|------|----------|
-| P0 | Phase 1 | 重构 Agent 循环为 Plan/Act/Reflect | 2-3 天 |
-| P0 | Phase 1 | 实现任务队列和分解 | 1-2 天 |
-| P1 | Phase 1 | 自我纠错机制 | 1-2 天 |
-| P1 | Phase 1 | 强化结构化输出 | 1 天 |
-| P2 | Phase 2 | MCP 客户端集成 | 2-3 天 |
-| P2 | Phase 2 | 进程监控能力 | 1-2 天 |
-| P3 | Phase 3 | 小模型适配优化 | 持续 |
-| P3 | Phase 4 | 测试和验证 | 持续 |
+| Priority | Phase | Task | Estimated Time |
+|----------|-------|------|----------------|
+| P0 | Phase 1 | Refactor Agent loop to Plan/Act/Reflect | 2-3 days |
+| P0 | Phase 1 | Implement task queue and decomposition | 1-2 days |
+| P1 | Phase 1 | Self-correction mechanism | 1-2 days |
+| P1 | Phase 1 | Enhance structured output | 1 day |
+| P2 | Phase 2 | MCP client integration | 2-3 days |
+| P2 | Phase 2 | Process monitoring | 1-2 days |
+| P3 | Phase 3 | Small model adaptation | Ongoing |
+| P3 | Phase 4 | Testing and validation | Ongoing |
 
 ---
 
-## 文件结构规划
+## File Structure
 
 ```
-MyAgent/
-├── main.py                 # 入口
+myAgent/
+├── main.py                 # Entry point
 ├── agent/
 │   ├── __init__.py
-│   ├── engine.py          # Agent 核心引擎 (Plan/Act/Reflect)
-│   ├── planner.py         # 任务规划和分解
-│   ├── executor.py        # 工具执行器
-│   ├── reflector.py       # 结果反思和纠错
+│   ├── engine.py          # Agent core engine (Plan/Act/Reflect)
+│   ├── planner.py         # Task planning and decomposition
+│   ├── executor.py        # Tool executor
+│   ├── reflector.py       # Result reflection and correction
 │   └── tools/
 │       ├── __init__.py
-│       ├── base.py        # 工具基类
-│       ├── file_tools.py  # 文件操作
-│       ├── exec_tools.py  # 执行工具
-│       ├── search_tools.py # 搜索工具
-│       └── mcp_tools.py   # MCP 集成
-├── providers/
-│   ├── __init__.py
-│   ├── base.py           # Provider 基类
-│   ├── ollama.py         # Ollama 实现
-│   └── openai.py         # OpenAI 兼容
+│       ├── base.py        # Tool base class
+│       ├── file_tools.py  # File operations
+│       ├── exec_tools.py  # Execution tools
+│       ├── search_tools.py # Search tools
+│       ├── git_tools.py   # Git operations
+│       ├── test_tools.py  # Test tools
+│       ├── quality_tools.py # Quality tools
+│       ├── dependency_tools.py # Dependency tools
+│       ├── deploy_tools.py # Deployment tools
+│       └── mcp_tools.py   # MCP integration
+├── cli/
+│   └── michael.py         # CLI interface
+├── memory/                 # External memory
+│   ├── state_manager.py  # Progress & checkpoints
+│   ├── embedding_store.py # Embedding storage
+│   └── external_memory.py # Workflow orchestrator
 ├── utils/
-│   ├── __init__.py
-│   ├── memory.py         # 对话记忆
-│   ├── schema.py         # 结构化输出
-│   └── logger.py         # 日志追踪
-├── mcp/
-│   ├── __init__.py
-│   ├── client.py         # MCP 客户端
-│   └── protocol.py      # MCP 协议
+│   ├── model_provider.py  # Multi-provider (Ollama, OpenAI, Anthropic)
+│   ├── llm_cache.py      # LLM response caching
+│   ├── cost_tracker.py   # Cost tracking
+│   └── persistent_memory.py
+├── skills/                # Built-in skills
+│   └── registry.py
 └── tests/
-    ├── test_agent.py
-    ├── test_tools.py
-    └── test_e2e.py
 ```
 
 ---
 
-*最后更新: 2026-04-21*
+*Last Updated: 2026-04-21*
 
 ---
 
-## 模块化重构 (2026-04-21)
+## Modular Refactoring (2026-04-21)
 
-根据 ROADMAP 结构重构代码，新增模块：
+Refactored code according to ROADMAP structure, new modules:
 
-| 模块 | 状态 | 说明 |
-|------|------|------|
-| `agent/tools/` | ✅ | 工具模块化 |
-| `agent/tools/base.py` | ✅ | 基础工具类 |
-| `agent/tools/file_tools.py` | ✅ | 文件操作工具 |
-| `agent/tools/exec_tools.py` | ✅ | 执行工具 |
-| `agent/tools/search_tools.py` | ✅ | 搜索工具 |
-| `agent/tools/git_tools.py` | ✅ | Git 操作工具 |
-| `agent/tools/mcp_tools.py` | ✅ | MCP 工具 |
-| `utils/memory.py` | ✅ | 对话记忆 |
-| `utils/logger.py` | ✅ | 日志追踪 |
-| `utils/schema.py` | ✅ | 结构化输出 |
-| `mcp/protocol.py` | ✅ | MCP 协议定义 |
+| Module | Status | Description |
+|--------|--------|-------------|
+| `agent/tools/` | ✅ | Tool modularization |
+| `agent/tools/base.py` | ✅ | Base tool class |
+| `agent/tools/file_tools.py` | ✅ | File operation tools |
+| `agent/tools/exec_tools.py` | ✅ | Execution tools |
+| `agent/tools/search_tools.py` | ✅ | Search tools |
+| `agent/tools/git_tools.py` | ✅ | Git operation tools |
+| `agent/tools/test_tools.py` | ✅ | Test tools |
+| `agent/tools/quality_tools.py` | ✅ | Quality tools |
+| `agent/tools/dependency_tools.py` | ✅ | Dependency tools |
+| `agent/tools/deploy_tools.py` | ✅ | Deploy tools |
+| `agent/tools/mcp_tools.py` | ✅ | MCP tools |
+| `utils/llm_cache.py` | ✅ | LLM response caching |
+| `utils/cost_tracker.py` | ✅ | Cost tracking |
+| `agent/coordinator.py` | ✅ | Multi-agent coordination |
 
-## 当前进度
+## Current Progress
 
-### ✅ 已完成
+### ✅ Completed
 
-| 阶段 | 内容 | 完成日期 |
-|------|------|----------|
-| Phase 1 | Agent 核心架构 (Plan/Act/Reflect) | 2026-04-20 |
-| Phase 2.1 | 交互式 CLI | 2026-04-20 |
-| Phase 2.2 | MCP 客户端集成 | 2026-04-21 |
-| Phase 2.3 | 进程监控 (/watch) | 2026-04-21 |
-| Phase 2.4 | Skills 系统 | 2026-04-21 |
-| Phase 3 | 小模型适配优化 (CoT 提示 + 降级策略) | 2026-04-21 |
-| Phase 4.1 | 单元测试 + 集成测试 | 2026-04-20 |
-| Phase 4.2 | E2E 端到端测试 | 2026-04-20 |
-| Phase 4.3 | 性能基准测试 | 2026-04-20 |
+| Phase | Content | Completion Date |
+|-------|---------|-----------------|
+| Phase 1 | Agent core architecture (Plan/Act/Reflect) | 2026-04-20 |
+| Phase 2.1 | Interactive CLI | 2026-04-20 |
+| Phase 2.2 | MCP client integration | 2026-04-21 |
+| Phase 2.3 | Process monitoring (/watch) | 2026-04-21 |
+| Phase 2.4 | Skills system | 2026-04-21 |
+| Phase 3 | Small model adaptation (CoT prompts + fallback) | 2026-04-21 |
+| Phase 4.1 | Unit tests + Integration tests | 2026-04-20 |
+| Phase 4.2 | E2E tests | 2026-04-20 |
+| Phase 4.3 | Performance benchmarks | 2026-04-20 |
 
-### ⏳ 待做
+### ⏳ Pending
 
-- 无
+- None
 
-### 📊 测试覆盖
+### 📊 Test Coverage
 
 ```
 tests/
-├── test_agent.py           # Agent 核心功能测试
-├── test_llm_models.py      # LLM 模型能力测试
-├── test_phase3_small_model.py  # 小模型优化测试
-├── test_skills_models.py   # Skills 系统测试
-├── test_phase4_validation.py   # Phase 4 验证测试 ⭐NEW
-└── test_e2e.py             # 端到端测试 ⭐NEW
+├── test_agent.py           # Agent core functionality tests
+├── test_llm_models.py      # LLM model capability tests
+├── test_phase3_small_model.py  # Small model optimization tests
+├── test_skills_models.py   # Skills system tests
+├── test_phase4_validation.py   # Phase 4 validation tests
+├── test_memory_interface.py   # Memory interface tests
+└── test_e2e.py             # End-to-end tests
 ```
 
 ---
 
-## Skills 系统 (已实现)
+## Skills System (Implemented)
 
 ```mermaid
 flowchart TD
-    subgraph 技能注册["技能注册"]
+    subgraph SkillRegistry["Skill Registry"]
         R1[SkillRegistry]
         R2[BaseSkill]
     end
 
-    subgraph 内置技能["内置技能"]
-        S1[code-review<br>代码审查]
-        S2[security-review<br>安全审查]
-        S3[simplify<br>代码简化]
-        S4[init<br>初始化文档]
+    subgraph BuiltInSkills["Built-in Skills"]
+        S1[code-review<br/>Code Review]
+        S2[security-review<br/>Security Review]
+        S3[simplify<br/>Code Simplify]
+        S4[init<br/>Initialize Docs]
     end
 
-    subgraph CLI命令["CLI 命令"]
+    subgraph CLICommands["CLI Commands"]
         C1[/code-review]
         C2[/security-review]
         C3[/simplify]
@@ -450,56 +454,56 @@ flowchart TD
     S4 --> C4
 ```
 
-### 内置 Skills
+### Built-in Skills
 
-| 命令 | 功能 |
-|------|------|
-| `/code-review` | 代码审查（TODO/FIXME、调试语句、空异常等） |
-| `/security-review` | 安全扫描（硬编码密码、SQL注入、shell注入等） |
-| `/simplify` | 代码重构（重复代码、函数过长等） |
-| `/init` | 初始化 CLAUDE.md 项目文档 |
+| Command | Function |
+|---------|----------|
+| `/code-review` | Code review (TODO/FIXME, debug statements, empty exceptions) |
+| `/security-review` | Security scan (hardcoded passwords, SQL injection, shell injection) |
+| `/simplify` | Code refactoring (duplicate code, long functions) |
+| `/init` | Initialize CLAUDE.md project documentation |
 
 ---
 
-## 外部记忆系统 - Layer 1 实现计划
+## External Memory System - Layer 1 Implementation Plan
 
-> 基于 Codex 审查反馈，采用战略捷径：最小化内存接口 + 模拟嵌入，真实向量搜索延后至 Layer 3
+> Based on Codex review feedback, using strategic shortcuts: minimal memory interface + mock embeddings, real vector search deferred to Layer 3
 
-**架构决策：**
-1. 最小化内存接口优先于存储和嵌入
-2. 使用模拟嵌入用于 MVP，真实 Ollama 嵌入延后
-3. 文件追加存储（无索引），后期迁移到向量数据库
+**Architecture Decisions:**
+1. Minimal memory interface prioritized over storage and embeddings
+2. Using mock embeddings for MVP, real Ollama embeddings deferred
+3. File append storage (no indexing), migrate to vector DB later
 
-**实现范围（Layer 1）：**
-- ✅ 内存接口：`remember()` 和 `recall()` 方法
-- ✅ 内存 Schema：会话元数据捕获（文件、标签、摘要）
-- ✅ 追加存储：`memory/sessions/` 下的 JSON 文件
-- ✅ `/search` CLI 命令（使用模拟嵌入）
-- ✅ 自动捕获：在 `AgentEngine` 的 `task_complete` 阶段钩入
+**Implementation Scope (Layer 1):**
+- ✅ Memory interface: `remember()` and `recall()` methods
+- ✅ Memory schema: Session metadata capture (files, tags, summaries)
+- ✅ Append storage: JSON files under `memory/sessions/`
+- ✅ `/search` CLI command (using mock embeddings)
+- ✅ Auto-capture: Hook into `AgentEngine` task_complete phase
 
-**不在 Layer 1 范围内：**
-- ❌ ChromaDB / 向量数据库（延后至 Layer 3）
-- ❌ 真实 Ollama 嵌入生成（延后）
-- ❌ 记忆清理和过期策略（延后）
-- ❌ 语义相似度搜索（延后）
+**Out of Layer 1 Scope:**
+- ❌ ChromaDB / Vector DB (deferred to Layer 3)
+- ❌ Real Ollama embedding generation (deferred)
+- ❌ Memory cleanup and expiration strategies (deferred)
+- ❌ Semantic similarity search (deferred)
 
-**文件变更：**
-| 文件 | 操作 |
-|------|------|
-| `memory/state_manager.py` | 扩展 richer metadata + retrieval API |
-| `memory/embedding_store.py` | 新建（模拟嵌入 + 文本回退） |
-| `memory/external_memory.py` | 增强 auto-capture |
-| `agent/engine.py` | 接入 auto-capture 钩子 |
-| `cli/michael.py` | 新增 `/search` 命令 |
-| `utils/model_provider.py` | 预留 `get_embeddings()` 接口 |
+**File Changes:**
+| File | Operation |
+|------|-----------|
+| `memory/state_manager.py` | Extended richer metadata + retrieval API |
+| `memory/embedding_store.py` | New (mock embeddings + text fallback) |
+| `memory/external_memory.py` | Enhanced auto-capture |
+| `agent/engine.py` | Hooked auto-capture |
+| `cli/michael.py` | Added `/search` command |
+| `utils/model_provider.py` | Reserved `get_embeddings()` interface |
 
-**测试计划：**
-- `tests/test_memory_interface.py` - 内存接口 + 模拟嵌入
-- `tests/test_session_capture.py` - 会话元数据捕获
-- `tests/test_search_flow.py` - /search 命令流程
+**Test Plan:**
+- `tests/test_memory_interface.py` - Memory interface + mock embeddings
+- `tests/test_session_capture.py` - Session metadata capture
+- `tests/test_search_flow.py` - /search command flow
 
-**风险缓解：**
-- 嵌入失败 → 文本关键词搜索回退
-- 存储损坏 → 从会话日志重建
+**Risk Mitigation:**
+- Embedding failure → Text keyword search fallback
+- Storage corruption → Rebuild from session logs
 
-*最后更新: 2026-04-27*
+*Last Updated: 2026-04-27*

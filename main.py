@@ -41,7 +41,7 @@ Examples:
     python main.py --chat                    # 交互式对话
     python main.py --chat --model qwen2.5:9b
     python main.py --model qwen2.5:9b "实现用户认证功能"
-    python main.py --provider rsxermu "重构代码并添加测试"
+    python main.py --provider openai "重构代码并添加测试"
         """,
     )
     parser.add_argument(
@@ -64,7 +64,7 @@ Examples:
     parser.add_argument(
         "--provider",
         "-p",
-        choices=["ollama", "rsxermu"],
+        choices=["ollama", "openai", "anthropic"],
         help="Provider to use (overrides ACTIVE_PROVIDER env var)",
     )
     parser.add_argument(
@@ -95,14 +95,13 @@ Examples:
 def list_providers() -> None:
     """List available providers."""
     print("Available providers:")
-    print("  - ollama: 远程 Ollama 服务器 (默认: http://192.168.0.124:11434)")
-    print("  - rsxermu: 远程 OpenAI 兼容 API")
+    print("  - ollama: Local Ollama server (default: http://localhost:11434)")
+    print("  - openai: OpenAI API")
     print()
     print("Environment variables:")
-    print("  OLLAMA_HOST: Ollama 服务器 URL (默认: http://192.168.0.124:11434)")
+    print("  OLLAMA_HOST: Ollama server URL (default: http://localhost:11434)")
     print("  MODEL_NAME: 模型名称 (默认: gemma4:latest)")
-    print("  RSXERMU_BASE_URL: rsxermu API URL")
-    print("  RSXERMU_API_KEY: rsxermu API key")
+    print("  OPENAI_API_KEY: OpenAI API key")
 
 
 def create_agent(args: argparse.Namespace) -> AgentEngine:
@@ -116,11 +115,8 @@ def create_agent(args: argparse.Namespace) -> AgentEngine:
         workspace=workspace,
         model=args.model or os.environ.get("MODEL_NAME", "gemma4:latest"),
         provider=args.provider or os.environ.get("ACTIVE_PROVIDER", "ollama"),
-        base_url=os.environ.get(
-            "OLLAMA_HOST",
-            "http://192.168.0.124:11434" if args.provider != "rsxermu" else "https://rsxermu666.cn"
-        ),
-        api_key=os.environ.get("RSXERMU_API_KEY"),
+        base_url=os.environ.get("OLLAMA_HOST", "http://localhost:11434"),
+        api_key=os.environ.get("OPENAI_API_KEY"),
         max_task_retries=args.max_retries,
         enable_llm_reflection=not args.no_llm_reflection,
         trace_enabled=True,
@@ -140,20 +136,16 @@ def run_cli(args: argparse.Namespace) -> int:
     provider = args.provider or os.environ.get("ACTIVE_PROVIDER", "ollama")
 
     if provider == "ollama":
-        base_url = os.environ.get("OLLAMA_HOST", "http://192.168.0.124:11434")
+        base_url = os.environ.get("OLLAMA_HOST", "http://localhost:11434")
     else:
-        base_url = os.environ.get(
-            "RSXERMU_BASE_URL",
-            "https://rsxermu666.cn"
-        )
+        base_url = os.environ.get("OPENAI_BASE_URL", "https://api.openai.com")
 
     cli = CLIInterface(
         workspace=workspace,
         model=model,
         provider=provider,
         base_url=base_url,
-        api_key=os.environ.get("RSXERMU_API_KEY"),
-    )
+        api_key=os.environ.get("OPENAI_API_KEY"),
 
     try:
         cli.run()
