@@ -441,10 +441,10 @@ flowchart TD
     end
 
     subgraph CLICommands["CLI Commands"]
-        C1["&#47;code-review"]
-        C2["&#47;security-review"]
-        C3["&#47;simplify"]
-        C4["&#47;init"]
+        C1["code-review"]
+        C2["security-review"]
+        C3["simplify"]
+        C4["init"]
     end
 
     R1 --> S1 & S2 & S3 & S4
