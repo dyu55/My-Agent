@@ -1,6 +1,7 @@
 # MyAgent
 .aider*
 .env
+CLAUDE.md
 logs/
 __pycache__/
 *.pyc
@@ -15,10 +16,10 @@ memory/memories.json
 .vscode/
 .idea/
 
-# 测试
+# Test
 .pytest_cache/
 .coverage
 htmlcov/
 
-# 工作区临时文件
+# Workspace temp files
 workspace/__pycache__/
