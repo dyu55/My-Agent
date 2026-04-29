@@ -70,7 +70,7 @@ python main.py "Create a TODO app"
 # Specify model
 python main.py --model qwen2.5:9b
 
-# Specify provider (ollama, openai, anthropic, rsxermu)
+# Specify provider (ollama, openai, anthropic)
 python main.py --provider ollama --model gemma4:latest
 ```
 
@@ -205,7 +205,7 @@ Copy `.env.example` to `.env` and configure your provider:
 cp .env.example .env
 ```
 
-Supported providers: Ollama, OpenAI, Anthropic, rsxermu
+Supported providers: Ollama, OpenAI, Anthropic
 
 ## Development
 
