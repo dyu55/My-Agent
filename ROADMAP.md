@@ -434,10 +434,10 @@ flowchart TD
     end
 
     subgraph BuiltInSkills["Built-in Skills"]
-        S1[code-review<br/>Code Review]
-        S2[security-review<br/>Security Review]
-        S3[simplify<br/>Code Simplify]
-        S4[init<br/>Initialize Docs]
+        S1["code-review<br/>Code Review"]
+        S2["security-review<br/>Security Review"]
+        S3["simplify<br/>Code Simplify"]
+        S4["init<br/>Initialize Docs"]
     end
 
     subgraph CLICommands["CLI Commands"]
