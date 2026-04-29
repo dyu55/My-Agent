@@ -4,12 +4,43 @@
 
 ## Features
 
+### Core Capabilities
 - 🤖 **Claude Code Style Interaction** - Just type a task description to execute
-- 💾 **External Memory Mode** - Persistent logs + Git version control + Feature tracking
-- 🔧 **Modular Tool System** - File operations, code execution, search, Git, MCP
-- 🌐 **Multi-Provider Support** - Ollama, OpenAI compatible APIs
 - 🔄 **Plan/Act/Reflect Loop** - Task planning, execution, reflection, error recovery
 - 🧠 **LLM Reflection** - Automatic error classification and recovery suggestions
+
+### Memory System
+- 💾 **Three-Layer Memory Architecture**:
+  - Layer 1: Conversation memory (short-term, auto-compression)
+  - Layer 2: Wiki + Embedding store (long-term, semantic search)
+  - Layer 3: State manager (progress tracking, checkpoints)
+- 🔍 **Embedding-based Search** - Semantic similarity search across sessions
+- 📝 **Auto-capture** - Automatic task summaries with tags
+
+### Tools
+- 📁 **File Operations** - Read, write, edit, create, delete files
+- ⚡ **Code Execution** - Run shell commands, tests, Python scripts
+- 🔎 **Search** - File content search, web search, URL fetch
+- 🔀 **Git Integration** - Commit, push, branch operations
+- 🧪 **Test Tools** - Discover tests, run pytest
+- ✅ **Quality Tools** - Lint, type check, security scan, complexity analysis
+- 📦 **Dependency Tools** - Import analysis, requirements generation
+- 🚀 **Deploy Tools** - Dockerfile, docker-compose, GitHub Actions generation
+- 🔌 **MCP Protocol** - Model Context Protocol support
+
+### Workflow
+- 💾 **External Memory Mode** - Persistent state across sessions
+- 🔀 **Auto Git** - Automatic staging and commit
+- 📋 **Progress Tracking** - Feature and task status monitoring
+- 🔄 **State Recovery** - Resume from checkpoints
+
+### Multi-Agent
+- 🤝 **MultiAgent Coordinator** - Parallel task execution
+- ⚡ **Speedup** - Parallel vs sequential execution comparison
+
+### Optimization
+- 💰 **LLM Cache** - Response caching for cost reduction
+- 📊 **Cost Tracker** - Usage monitoring and optimization
 
 ## Quick Start
 
@@ -38,6 +69,9 @@ python main.py "Create a TODO app"
 
 # Specify model
 python main.py --model qwen2.5:9b
+
+# Specify provider (ollama, openai, anthropic, rsxermu)
+python main.py --provider ollama --model gemma4:latest
 ```
 
 ## Interactive Mode
@@ -53,10 +87,12 @@ python main.py --model qwen2.5:9b
 | Command | Description |
 |---------|-------------|
 | `/task <desc>` | Execute task |
-| `/edit <file>` | View file |
+| `/edit <file>` | Edit file |
+| `/read <file>` | Read file |
 | `/run <cmd>` | Execute shell command |
 | `/test` | Run pytest |
 | `/git <args>` | Git operations |
+| `/search <query>` | Search memories |
 | `/status` | Show status |
 | `/help` | Help |
 | `/exit` | Exit |
@@ -69,6 +105,22 @@ When context approaches the limit, the system will automatically prompt to enabl
 /em start          # Start workflow
 /em commit         # Commit changes
 /em complete       # Complete and clear context
+/em search <query> # Search memories
+```
+
+### Three-Layer Memory
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  Layer 1: Conversation Memory (短期记忆)                 │
+│  └── Auto-compression when approaching token limit       │
+├─────────────────────────────────────────────────────────┤
+│  Layer 2: Wiki Store + Embeddings (长期记忆)             │
+│  └── Semantic search, auto-capture task summaries        │
+├─────────────────────────────────────────────────────────┤
+│  Layer 3: State Manager (项目状态)                       │
+│  └── progress.json, checkpoints, session logs           │
+└─────────────────────────────────────────────────────────┘
 ```
 
 ### Features
@@ -77,47 +129,72 @@ When context approaches the limit, the system will automatically prompt to enabl
 - 📝 **Session Logs** - Persistent execution history
 - 🔀 **Git Integration** - Auto-save changes
 - 💾 **State Recovery** - Resume from last interruption
+- 🔍 **Semantic Search** - Embedding-based memory retrieval
 
 ## Project Structure
 
 ```
-MyAgent/
+myAgent/
 ├── agent/                 # Agent core
-│   ├── engine.py         # Agent engine
-│   ├── planner.py        # Task planning
+│   ├── engine.py         # Agent engine (Plan/Act/Reflect)
+│   ├── planner.py        # Task planning & decomposition
 │   ├── executor.py       # Tool execution
-│   ├── reflector.py      # Reflection & error recovery
-│   └── external_memory_integration.py  # External memory
-├── cli/                   # CLI
-│   ├── michael.py        # Claude Code style CLI
-│   └── interface.py      # Classic CLI
+│   ├── reflector.py      # Error classification & recovery
+│   ├── coordinator.py   # Multi-agent coordination
+│   └── tools/            # Modular tool system
+│       ├── file_tools.py
+│       ├── exec_tools.py
+│       ├── search_tools.py
+│       ├── git_tools.py
+│       ├── test_tools.py      # Test discovery & execution
+│       ├── quality_tools.py   # lint, type_check, security_scan
+│       ├── dependency_tools.py
+│       ├── deploy_tools.py    # Dockerfile, CI/CD
+│       └── mcp_tools.py
+├── cli/
+│   └── michael.py        # Claude Code style CLI
 ├── memory/                # External memory
-│   ├── state_manager.py # State management
-│   ├── external_memory.py  # Workflow
-│   └── progress.json     # Progress table
+│   ├── state_manager.py # Progress & checkpoints
+│   ├── embedding_store.py  # Embedding storage
+│   └── external_memory.py  # Workflow orchestrator
+├── wiki/                  # Long-term knowledge
+│   ├── store.py
+│   └── llm_wiki.py       # Auto-capture & tagging
 ├── skills/                # Built-in skills
-│   ├── code-review       # Code review
-│   ├── security-review   # Security review
-│   └── simplify          # Code simplification
-├── mcp/                   # MCP protocol
-├── utils/                 # Utilities
-└── tests/                 # Tests
+│   └── registry.py
+├── utils/
+│   ├── model_provider.py # Multi-provider (Ollama, OpenAI, etc.)
+│   ├── llm_cache.py      # Response caching
+│   ├── cost_tracker.py   # Usage monitoring
+│   └── persistent_memory.py
+└── tests/
 ```
 
 ## Workflow
 
 ```
-┌─────────────┐
-│ 1. Read State │ ← Load tasks from progress.json
-├─────────────┤
-│ 2. Write Code │ ← Agent executes tasks
-├─────────────┤
-│ 3. Run Tests │ ← pytest validation
-├─────────────┤
-│ 4. Git Commit │ ← Auto stage + commit
-├─────────────┤
-│ 5. Clear Context │ ← Persist and release
-└─────────────┘
+┌──────────────────────────────────────────────────────────────┐
+│                    External Memory Loop                       │
+├──────────────────────────────────────────────────────────────┤
+│                                                              │
+│   ┌─────────────┐    ┌─────────────┐    ┌─────────────┐     │
+│   │ 1. READ     │ →  │ 2. WRITE    │ →  │ 3. TEST     │     │
+│   │   STATE     │    │   CODE      │    │   CODE      │     │
+│   └─────────────┘    └─────────────┘    └─────────────┘     │
+│         ↑                                        │           │
+│         │           ┌─────────────┐              ↓           │
+│         └───────────│ 6. CLEAR    │ ← ┌─────────────┐        │
+│                     │   CONTEXT   │   │ 4. GIT      │        │
+│                     └─────────────┘   │   COMMIT    │        │
+│                                        └─────────────┘        │
+│                                              │                │
+│                                              ↓                │
+│                                        ┌─────────────┐        │
+│                                        │ 5. UPDATE  │        │
+│                                        │   PROGRESS │        │
+│                                        └─────────────┘        │
+│                                                              │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ## Configuration
@@ -127,6 +204,8 @@ Copy `.env.example` to `.env` and configure your provider:
 ```bash
 cp .env.example .env
 ```
+
+Supported providers: Ollama, OpenAI, Anthropic, rsxermu
 
 ## Development
 
