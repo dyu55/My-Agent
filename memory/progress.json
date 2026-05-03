@@ -1,12 +1,12 @@
 {
   "version": "1.0",
   "created_at": "2026-04-23T00:00:00.000000",
-  "updated_at": "2026-04-23T00:00:00.000000",
+  "updated_at": "2026-05-02T00:00:00.000000",
   "metadata": {
     "project_name": "MyAgent",
-    "description": "本地 Coding Agent - 外部记忆模式",
-    "current_phase": "phase_3_completed",
-    "external_memory_enabled": false
+    "description": "本地 Coding Agent - Skills系统增强",
+    "current_phase": "skills_enhanced",
+    "external_memory_enabled": true
   },
   "features": [
     {
@@ -14,7 +14,7 @@
       "name": "外部记忆模式",
       "description": "基于持久化日志、Git版本控制、功能清单的外部记忆系统",
       "priority": 2,
-      "status": "in_progress",
+      "status": "completed",
       "tasks": [
         {
           "id": "feat_001_task_01",
@@ -36,9 +36,47 @@
           "description": "将外部记忆模式集成到 AgentEngine",
           "status": "completed",
           "created_at": "2026-04-23T00:00:00.000000"
+        },
+        {
+          "id": "feat_001_task_04",
+          "name": "ChromaDB集成",
+          "description": "Layer 3 - ChromaDB向量存储 + Ollama嵌入",
+          "status": "completed",
+          "created_at": "2026-04-28T00:00:00.000000"
         }
       ],
       "created_at": "2026-04-23T00:00:00.000000"
+    },
+    {
+      "id": "feat_skill_engine",
+      "name": "SkillEngine增强",
+      "description": "增强的参数解析和Skill链式执行",
+      "priority": 2,
+      "status": "completed",
+      "tasks": [
+        {
+          "id": "feat_skill_engine_01",
+          "name": "修复PARAM_PATTERN",
+          "description": "支持连字符参数名如--file-path",
+          "status": "completed",
+          "created_at": "2026-05-02T00:00:00.000000"
+        },
+        {
+          "id": "feat_skill_engine_02",
+          "name": "修复Skill.matches()",
+          "description": "标准化名称比较(下划线/连字符)",
+          "status": "completed",
+          "created_at": "2026-05-02T00:00:00.000000"
+        },
+        {
+          "id": "feat_skill_engine_03",
+          "name": "修复测试tmp_path",
+          "description": "添加缺失的tmp_path fixture",
+          "status": "completed",
+          "created_at": "2026-05-02T00:00:00.000000"
+        }
+      ],
+      "created_at": "2026-05-02T00:00:00.000000"
     }
   ],
   "sessions": []
