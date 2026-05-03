@@ -1,25 +1,32 @@
-class Calculator:
-    """
-    一个简单的计算器类，提供加、减、乘、除功能。
-    """
-    def add(self, a: float, b: float) -> float:
-        """计算两个数之和。
-        """ 
-        return a + b
+def add(a, b):
+    """Adds two numbers."""
+    return a + b
 
-    def subtract(self, a: float, b: float) -> float:
-        """计算两个数的差。
-        """ 
-        return a - b
+def subtract(a, b):
+    """Subtracts two numbers."""
+    return a - b
 
-    def multiply(self, a: float, b: float) -> float:
-        """计算两个数的积。
-        """ 
-        return a * b
+def multiply(a, b):
+    """Multiplies two numbers."""
+    return a * b
 
-    def divide(self, a: float, b: float) -> float:
-        """计算两个数之比。如果除数b为0，则抛出ZeroDivisionError。
-        """ 
-        if b == 0:
-            raise ZeroDivisionError("不能除以零")
-        return a / b
+def divide(a, b):
+    """Divides two numbers. Handles division by zero."""
+    if b == 0:
+        raise ValueError("Cannot divide by zero")
+    return a / b
+
+# Optional: A main function or dispatcher for easy use
+OPERATIONS = {
+    "+": add,
+    "-": subtract,
+    "*": multiply,
+    "/": divide
+}
+
+def calculate(num1, num2, operation):
+    """Performs the calculation based on the given operation symbol."""
+    if operation in OPERATIONS:
+        return OPERATIONS[operation](num1, num2)
+    else:
+        raise ValueError("Invalid operation symbol. Supported operations: +, -, *, /")
