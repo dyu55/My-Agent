@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -15,8 +16,48 @@ from utils.model_provider import ModelManager
 from utils.conversation import ConversationMemory
 from utils.persistent_memory import PersistentMemory, SessionMemory
 from utils.logger import TraceLogger
+from utils.streaming_progress import StreamingProgress
+from memory.cross_session_memory import CrossSessionMemory, get_cross_session_memory
 
 logger = logging.getLogger(__name__)
+
+
+def _extract_json_from_response(response: str) -> dict[str, Any] | list | None:
+    """
+    Extract JSON from model response, handling markdown code blocks.
+
+    Models often return JSON wrapped in ```json ... ``` blocks.
+    This function extracts the JSON content.
+
+    Returns:
+        Parsed JSON data (dict or list), or None if extraction fails.
+    """
+    if not isinstance(response, str):
+        return response
+
+    # Try direct parse first
+    try:
+        return json.loads(response)
+    except json.JSONDecodeError:
+        pass
+
+    # Try to extract from code blocks
+    patterns = [
+        r"```json\s*([\s\S]*?)\s*```",  # ```json ... ```
+        r"```\s*([\s\S]*?)\s*```",      # ``` ... ```
+    ]
+
+    for pattern in patterns:
+        match = re.search(pattern, response)
+        if match:
+            content = match.group(1).strip()
+            if content.startswith("{") or content.startswith("["):
+                try:
+                    return json.loads(content)
+                except json.JSONDecodeError:
+                    pass
+
+    return None
 
 
 @dataclass
@@ -62,6 +103,9 @@ class LLMClient:
     def _get_model_manager(self) -> ModelManager:
         """Get or create the model manager."""
         if self._model_manager is None:
+            # Pass api_key through env var (for Ollama Cloud auth)
+            if self.config.api_key:
+                os.environ["OLLAMA_API_KEY"] = self.config.api_key
             self._model_manager = ModelManager(
                 default_provider=self.config.provider,
                 default_model=self.config.model,
@@ -155,6 +199,8 @@ class AgentEngine:
         self.session_memory = SessionMemory()
         self.state = AgentState()
         self.logger = TraceLogger(Path("logs")) if config.trace_enabled else None
+        self.progress = StreamingProgress(enabled=True)
+        self.cross_session_memory = get_cross_session_memory()
 
         print(f"   🌐 Base URL: {config.base_url}")
 
@@ -168,9 +214,8 @@ class AgentEngine:
         Returns:
             Final result or error message
         """
-        print(f"\n{'='*60}")
-        print(f"🎯 开始执行任务: {task}")
-        print(f"{'='*60}\n")
+        self.progress.start(task)
+        self.progress.set_phase("plan")
 
         self._log("agent_start", {"task": task})
 
@@ -178,7 +223,8 @@ class AgentEngine:
         plan = self._create_plan(task)
         self.state.current_plan = plan
 
-        print(f"\n📋 执行计划已创建，共 {len(plan.subtasks)} 个子任务\n")
+        self.progress.set_total_tasks(len(plan.subtasks))
+        self.progress.log("📋", f"执行计划已创建，共 {len(plan.subtasks)} 个子任务", "success")
 
         # Phase 2: Act & Reflect loop
         while not self.state.is_complete:
@@ -200,7 +246,8 @@ class AgentEngine:
         # Get current project context
         context = self._get_project_context()
 
-        print("🔄 正在分析任务并创建执行计划...")
+        self.progress.update_task("分析任务并创建执行计划...")
+        self.progress.log("🧠", "正在分析任务...", "info")
 
         plan = self.planner.create_plan(task, context)
         self._log("plan_created", plan.to_dict())
@@ -232,13 +279,16 @@ class AgentEngine:
         self.state.current_task_id = task.id
         task.status = TaskStatus.IN_PROGRESS
 
-        print(f"\n📌 开始执行: {task.description}")
+        self.progress.set_phase("act")
+        self.progress.update_task(task.description)
 
         # Generate action for this task
         action = self._generate_action(task)
+        self.progress.increment_llm_calls()
 
         # Execute the action
         result = self.executor.execute_action(action)
+        self.progress.increment_tool_execution()
 
         return task.id, task.description, result
 
@@ -281,10 +331,23 @@ execute: {{"command": "execute", "script": "python 文件名.py", "path": "工�
 
         try:
             response = self.llm.chat(prompt, schema={"type": "json_object"})
-            if isinstance(response, str):
-                data = json.loads(response)
-            else:
-                data = response
+
+            # Extract JSON from markdown code blocks
+            data = _extract_json_from_response(response)
+
+            if data is None:
+                return Action(command="debug", content=f"无法解析任务: {task.description}")
+
+            # Handle array responses - take the first item
+            if isinstance(data, list):
+                if len(data) == 0:
+                    return Action(command="debug", content=f"模型返回空数组: {task.description}")
+                # Take the first action
+                data = data[0]
+
+            # Ensure data is a dict
+            if not isinstance(data, dict):
+                return Action(command="debug", content=f"无效响应类型: {type(data)}")
 
             # 调试日志
             logger.debug(f"LLM 响应: {json.dumps(data, ensure_ascii=False)[:500]}")
@@ -333,17 +396,13 @@ execute: {{"command": "execute", "script": "python 文件名.py", "path": "工�
         is_error = exec_result.status == ExecutionStatus.FAILURE
 
         # Reflect on the result
+        self.progress.set_phase("reflect")
         reflection = self.reflector.reflect(
             action_command=exec_result.command,
             execution_output=exec_result.output,
             is_error=is_error,
             context=task_desc,
         )
-
-        print(f"\n📊 执行结果: {exec_result.status.value}")
-        if is_error:
-            print(f"   错误分析: {reflection.error_category.value if reflection.error_category else 'unknown'}")
-            print(f"   建议: {reflection.suggestion or 'N/A'}")
 
         # Record in memory
         self.memory.add("assistant", f"Task: {task_desc}\nAction: {exec_result.command}")
@@ -357,23 +416,30 @@ execute: {{"command": "execute", "script": "python 文件名.py", "path": "工�
         if reflection.is_successful:
             task.status = TaskStatus.COMPLETED
             task.result = exec_result.output
-            print("   ✅ 任务完成")
+            self.progress.task_completed()
+            self.progress.log("✅", f"任务完成: {task.description[:50]}", "success")
+
+            # Learn from successful execution
+            self._learn_from_task(task, exec_result)
         elif reflection.should_retry and task.retry_count < plan.max_attempts:
             # 如果是 edit 命令失败且 old_text not found，改为使用 write 命令
             if exec_result.command == "edit" and "old_text not found" in (exec_result.output or ""):
                 task.retry_count += 1
                 task.status = TaskStatus.PENDING
-                print(f"   🔄 edit 失败，改为使用 write 命令重试 ({task.retry_count}/{plan.max_attempts})")
+                self.progress.log("🔄", f"edit 失败，使用 write 重试 ({task.retry_count}/{plan.max_attempts})", "warning")
                 # 强制生成 write 命令而不是 edit
                 self.state.force_write_command = True
             else:
                 task.retry_count += 1
                 task.status = TaskStatus.PENDING
-                print(f"   🔄 准备重试 ({task.retry_count}/{plan.max_attempts})")
+                self.progress.log("🔄", f"重试中 ({task.retry_count}/{plan.max_attempts})", "warning")
         else:
             task.status = TaskStatus.FAILED
             task.error = reflection.error_message
-            print("   ❌ 任务失败")
+            self.progress.task_failed()
+            self.progress.log("❌", f"任务失败: {task.description[:50]}", "error")
+            if is_error:
+                self.progress.log("💡", f"建议: {reflection.suggestion or 'N/A'}", "info")
 
         # Check if all tasks are done
         if plan.all_completed():
@@ -410,25 +476,54 @@ execute: {{"command": "execute", "script": "python 文件名.py", "path": "工�
     def _finalize(self) -> None:
         """Finalize the agent run."""
         plan = self.state.current_plan
-
-        print(f"\n{'='*60}")
-        print("📊 执行总结")
-        print(f"{'='*60}")
+        self.progress.set_phase("done")
 
         if plan:
             completed = sum(1 for t in plan.subtasks if t.status == TaskStatus.COMPLETED)
             failed = sum(1 for t in plan.subtasks if t.status == TaskStatus.FAILED)
             pending = sum(1 for t in plan.subtasks if t.status == TaskStatus.PENDING)
 
-            print(f"完成: {completed} | 失败: {failed} | 待处理: {pending}")
-            print(f"\n{self.planner.get_task_summary(plan)}")
+            summary = f"完成: {completed} | 失败: {failed} | 待处理: {pending}"
+        else:
+            summary = "无执行计划"
 
-        print(f"\n🎉 最终结果: {self.state.final_result}")
+        self.progress.finish(f"{self.state.final_result or '完成'}")
+
+        if plan:
+            print(f"\n📋 {self.planner.get_task_summary(plan)}")
 
         self._log("agent_complete", {
             "final_result": self.state.final_result,
             "plan_summary": plan.to_dict() if plan else None,
         })
+
+        # Cleanup stale patterns
+        self.cross_session_memory.cleanup_stale()
+
+    def _learn_from_task(self, task, exec_result: ExecutionResult) -> None:
+        """Learn from successful task execution."""
+        try:
+            # Extract tags from task description
+            tags = [t.lower() for t in task.description.split() if len(t) > 2]
+
+            self.cross_session_memory.learn(
+                name=f"Task: {task.description[:60]}",
+                pattern_type=CrossSessionMemory.TYPE_TASK,
+                content=f"Task: {task.description}\nResult: {exec_result.output[:500]}",
+                description=f"Successfully executed: {task.description}",
+                tags=tags,
+            )
+        except Exception:
+            # Learning failures should not affect main flow
+            pass
+
+    def _recall_patterns(self, query: str, limit: int = 3) -> list:
+        """Recall relevant patterns from cross-session memory."""
+        try:
+            patterns = self.cross_session_memory.recall(query, limit=limit)
+            return patterns
+        except Exception:
+            return []
 
     def _log(self, event: str, payload: dict[str, Any]) -> None:
         """Log an event."""
