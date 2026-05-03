@@ -404,6 +404,8 @@ Refactored code according to ROADMAP structure, new modules:
 | Phase 4.1 | Unit tests + Integration tests | 2026-04-20 |
 | Phase 4.2 | E2E tests | 2026-04-20 |
 | Phase 4.3 | Performance benchmarks | 2026-04-20 |
+| Layer 1 | External Memory System - Core Interface | 2026-04-27 |
+| Layer 3 | External Memory System - ChromaDB + Ollama Embeddings | 2026-04-28 |
 
 ### ⏳ Pending
 
@@ -481,11 +483,33 @@ flowchart TD
 - ✅ `/search` CLI command (using mock embeddings)
 - ✅ Auto-capture: Hook into `AgentEngine` task_complete phase
 
-**Out of Layer 1 Scope:**
-- ❌ ChromaDB / Vector DB (deferred to Layer 3)
-- ❌ Real Ollama embedding generation (deferred)
-- ❌ Memory cleanup and expiration strategies (deferred)
-- ❌ Semantic similarity search (deferred)
+**Layer 3 Implementation (Completed 2026-04-28):**
+- ✅ ChromaDB / Vector DB integration
+- ✅ Real Ollama embedding generation (nomic-embed-text)
+- ✅ Memory cleanup and expiration strategies
+- ✅ Semantic similarity search
+
+**Layer 3 Architecture:**
+1. ChromaDB PersistentClient for vector storage with cosine similarity
+2. OllamaEmbeddings class using nomic-embed-text model
+3. MemoryCleanupPolicy with age-based and access-based cleanup
+4. Hybrid search combining semantic (ChromaDB) and keyword matching
+
+**Out of Layer 3 Scope (Future Layers):**
+- ⏳ Cross-session memory linking and graph relationships
+- ⏳ Importance scoring based on task outcomes
+- ⏳ Memory summarization and compression
+
+**File Changes (Layer 3):**
+| File | Operation |
+|------|-----------|
+| `memory/embedding_store.py` | Complete rewrite with ChromaDB + Ollama embeddings |
+| `memory/chroma_db/` | New ChromaDB persistent storage |
+
+**Test Plan (Layer 3):**
+- Semantic search accuracy testing
+- Cleanup policy verification
+- Ollama embedding fallback handling
 
 **File Changes:**
 | File | Operation |
