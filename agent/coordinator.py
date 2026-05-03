@@ -1,6 +1,7 @@
 """Multi-Agent Coordinator - Parallel task execution and agent collaboration."""
 
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Callable
@@ -141,29 +142,46 @@ class MultiAgentCoordinator:
         self,
         batch: list[tuple[str, Callable]],
     ) -> dict[str, Any]:
-        """Execute a batch of tasks."""
+        """Execute a batch of tasks in parallel using ThreadPoolExecutor."""
         results = {}
 
-        for task_id, func in batch:
-            task = self.tasks[task_id]
-            task.status = "running"
-            task.start_time = time.time()
+        with ThreadPoolExecutor(max_workers=len(batch)) as executor:
+            # Submit all tasks
+            future_to_task = {
+                executor.submit(self._execute_single, task_id, func): task_id
+                for task_id, func in batch
+            }
 
-            try:
-                result = func()
-                task.result = result
-                task.status = "completed"
-                results[task_id] = result
-
-            except Exception as e:
-                task.error = str(e)
-                task.status = "failed"
-                results[task_id] = {"error": str(e)}
-
-            finally:
-                task.end_time = time.time()
+            # Collect results as they complete
+            for future in as_completed(future_to_task):
+                task_id = future_to_task[future]
+                try:
+                    result = future.result()
+                    results[task_id] = result
+                except Exception as e:
+                    results[task_id] = {"error": str(e)}
 
         return results
+
+    def _execute_single(self, task_id: str, func: Callable) -> Any:
+        """Execute a single task and update task status."""
+        task = self.tasks[task_id]
+        task.status = "running"
+        task.start_time = time.time()
+
+        try:
+            result = func()
+            task.result = result
+            task.status = "completed"
+            return result
+
+        except Exception as e:
+            task.error = str(e)
+            task.status = "failed"
+            return {"error": str(e)}
+
+        finally:
+            task.end_time = time.time()
 
     def execute_sequential(
         self,
@@ -226,6 +244,11 @@ class MultiAgentCoordinator:
         results = {}
         pending = set(task_functions.keys())
         completed = set()
+
+        # Initialize all tasks first (matching execute_parallel pattern)
+        for task_id, func in task_functions.items():
+            if task_id not in self.tasks:
+                self.add_task(task_id, f"Task {task_id}")
 
         while pending:
             # Find tasks with all dependencies satisfied

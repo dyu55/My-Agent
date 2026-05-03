@@ -9,6 +9,7 @@ from .external_memory_integration import (
     AgentEngineWithExternalMemory,
     create_external_memory_manager,
 )
+from .skills import SkillEngine, SkillMetadata, SkillParameter, SkillResult
 
 __all__ = [
     "AgentEngine",
@@ -19,4 +20,8 @@ __all__ = [
     "ExternalMemoryManager",
     "AgentEngineWithExternalMemory",
     "create_external_memory_manager",
+    "SkillEngine",
+    "SkillMetadata",
+    "SkillParameter",
+    "SkillResult",
 ]

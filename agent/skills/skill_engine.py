@@ -75,8 +75,8 @@ class SkillEngine:
         result = engine.execute("code-review", context, {"file_path": "main.py"})
     """
 
-    # Pattern to match parameters like --param value or --flag
-    PARAM_PATTERN = re.compile(r"--(\w+)(?:\s+(.+?))?(?=\s+--|$)")
+    # Pattern to match parameters like --param value or --flag or --hyphenated-param
+    PARAM_PATTERN = re.compile(r"--([\w-]+)(?:\s+(\S+))?(?=\s+--|$)")
 
     def __init__(self, registry: SkillRegistry):
         self.registry = registry
