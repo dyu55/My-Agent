@@ -23,11 +23,15 @@ class Skill:
     def matches(self, input_str: str) -> bool:
         """Check if input matches this skill's trigger or aliases."""
         name = input_str.strip().split()[0].lower() if input_str else ""
-        trigger_name = self.trigger.strip().lower()
+        trigger_name = self.trigger.strip().lstrip("/").lower()
+        # Normalize both to underscores for comparison
+        trigger_normalized = trigger_name.replace("-", "_")
+        name_normalized = name.replace("-", "_")
         return (
             name == trigger_name
-            or name in [a.lower() for a in self.aliases]
-            or name == f"/{self.name.replace('_', '-')}"
+            or name == f"/{trigger_name}"
+            or name_normalized in [a.lower().replace("-", "_") for a in self.aliases]
+            or name_normalized == trigger_normalized
         )
 
 
@@ -322,6 +326,23 @@ class SkillRegistry:
             SimplifySkill(),
         ]
 
+        # Try to load additional builtin skills
+        try:
+            from skills.builtin import (
+                TestGenerationSkill,
+                ApiDesignSkill,
+                DocGenerationSkill,
+                BrowserSkill,
+            )
+            builtins.extend([
+                TestGenerationSkill(),
+                ApiDesignSkill(),
+                DocGenerationSkill(),
+                BrowserSkill(),
+            ])
+        except ImportError:
+            pass  # Builtin skills not available
+
         for skill in builtins:
             self.register(skill.to_skill())
 
@@ -335,6 +356,49 @@ class SkillRegistry:
             if skill.matches(trigger):
                 return skill
         return None
+
+    def find_by_category(self, category: str) -> list[Skill]:
+        """Find all skills in a specific category."""
+        return [s for s in self.skills if s.category == category]
+
+    def search(self, query: str) -> list[Skill]:
+        """Search skills by name, description, or trigger."""
+        query_lower = query.lower()
+        results = []
+        for skill in self.skills:
+            if (
+                query_lower in skill.name.lower()
+                or query_lower in skill.description.lower()
+                or query_lower in skill.trigger.lower()
+            ):
+                results.append(skill)
+        return results
+
+    def get_metadata(self, skill_name: str) -> dict[str, Any]:
+        """Get metadata for a skill."""
+        skill = self.find(skill_name)
+        if not skill:
+            return {}
+        return {
+            "name": skill.name,
+            "description": skill.description,
+            "trigger": skill.trigger,
+            "aliases": skill.aliases,
+            "category": skill.category,
+        }
+
+    def validate(self, skill: Skill) -> list[str]:
+        """Validate that a skill is properly defined."""
+        errors = []
+        if not skill.name:
+            errors.append("Skill name is required")
+        if not skill.description:
+            errors.append("Skill description is required")
+        if not skill.trigger:
+            errors.append("Skill trigger is required")
+        if not callable(skill.handler):
+            errors.append("Skill handler must be callable")
+        return errors
 
     def list_by_category(self) -> dict[str, list[Skill]]:
         """List skills grouped by category."""

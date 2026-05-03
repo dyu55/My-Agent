@@ -1,5 +1,4 @@
 """Skills module."""
-
 from .registry import (
     BaseSkill,
     Skill,
@@ -23,3 +22,10 @@ __all__ = [
     "InitSkill",
     "SimplifySkill",
 ]
+
+# Try to import builtin skills
+try:
+    from .builtin import TestGenerationSkill, ApiDesignSkill, DocGenerationSkill
+    __all__.extend(["TestGenerationSkill", "ApiDesignSkill", "DocGenerationSkill"])
+except ImportError:
+    pass
