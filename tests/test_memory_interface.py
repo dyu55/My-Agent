@@ -84,7 +84,7 @@ class TestEmbeddingStore:
         with open(temp_store.index_file, "r") as f:
             data = json.load(f)
 
-        assert data["version"] == "1.0"
+        assert data["version"] == "3.0"
         assert data["entries"] == []
 
     def test_remember_stores_memory(self, temp_store):
@@ -114,7 +114,7 @@ class TestEmbeddingStore:
         entry = index_data["entries"][0]
 
         assert entry["embedding"] is not None
-        assert len(entry["embedding"]) == 128  # 128 维向量
+        assert len(entry["embedding"]) == 768  # 768 维向量 (nomic-embed-text)
 
     def test_remember_id_uniqueness(self, temp_store):
         """remember() 生成唯一 ID"""
@@ -288,10 +288,10 @@ class TestMockEmbedding:
         assert embedding1 != embedding2
 
     def test_mock_embedding_length(self, store):
-        """模拟嵌入长度为 128"""
+        """模拟嵌入长度为 768"""
         embedding = store._generate_mock_embedding("Test content")
 
-        assert len(embedding) == 128
+        assert len(embedding) == 768
 
     def test_mock_embedding_range(self, store):
         """模拟嵌入值范围 [-1, 1]"""

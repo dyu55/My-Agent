@@ -208,7 +208,7 @@ class TestSkillEngine:
         assert "code-review" in summary
         assert "simplify" in summary
 
-    def test_execution_history_tracking(self, engine, context):
+    def test_execution_history_tracking(self, engine, context, tmp_path):
         """Test that execution history is tracked."""
         (tmp_path / "test.py").write_text("print('hello')")
 
