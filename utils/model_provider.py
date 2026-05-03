@@ -44,16 +44,35 @@ class BaseModelProvider(ABC):
 
 
 class OllamaProvider(BaseModelProvider):
-    """Ollama provider for local models."""
+    """Ollama provider for local/remote models and Ollama Cloud.
+
+    Supports:
+    - Local Ollama (http://localhost:11434)
+    - Remote Ollama server (e.g., http://192.168.0.124:11434)
+    - Ollama Cloud (https://cloud.ollama.ai with API key)
+    """
 
     def __init__(
         self,
         model: str = "gemma4:latest",
         base_url: str = "http://localhost:11434",
+        timeout: int = 600,  # 10 minutes default for slow remote servers
+        api_key: str | None = None,  # For Ollama Cloud authentication
     ):
         self.model = model
         self.base_url = base_url
-        self.client = ollama.Client(host=base_url)
+        self.timeout = timeout
+        self.api_key = api_key or os.getenv("OLLAMA_API_KEY")
+
+        # Create client with auth headers if API key provided (for Ollama Cloud)
+        if self.api_key:
+            self.client = ollama.Client(
+                host=base_url,
+                timeout=timeout,
+                headers={"Authorization": f"Bearer {self.api_key}"}
+            )
+        else:
+            self.client = ollama.Client(host=base_url, timeout=timeout)
 
     def chat(self, prompt: str, **kwargs) -> str:
         """Send a chat request to Ollama."""
@@ -61,7 +80,9 @@ class OllamaProvider(BaseModelProvider):
 
         kwargs.setdefault("model", self.model)
         kwargs.setdefault("messages", messages)
-        kwargs.setdefault("format", "json")  # Request JSON format
+
+        # Don't force JSON format - let model respond naturally
+        # kwargs.setdefault("format", "json")
 
         if "options" not in kwargs:
             kwargs["options"] = {
@@ -75,15 +96,22 @@ class OllamaProvider(BaseModelProvider):
         """List installed Ollama models."""
         models = []
         try:
-            for model in self.client.list()["models"]:
+            response = self.client.list()
+            # Handle both dict and ListResponse object formats
+            model_list = response.models if hasattr(response, 'models') else response.get("models", [])
+            for model in model_list:
+                # Handle both dict and Model object formats
+                name = model.model if hasattr(model, 'model') else model.get("name")
+                size = model.size if hasattr(model, 'size') else model.get("size")
+                modified = model.modified_at if hasattr(model, 'modified_at') else model.get("modified_at")
                 models.append(ModelInfo(
-                    name=model["name"],
+                    name=name,
                     provider="ollama",
-                    size=model.get("size"),
-                    modified=model.get("modified_at"),
+                    size=size,
+                    modified=modified,
                 ))
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Error listing models: {e}")
         return models
 
     def pull_model(self, model_name: str) -> bool:
@@ -226,8 +254,15 @@ class ModelManager:
 
     def _init_provider(self) -> None:
         """Initialize the current provider."""
+        # Get API key for Ollama Cloud
+        ollama_api_key = os.getenv("OLLAMA_API_KEY")
+
         provider_config = {
-            "ollama": {"model": self.current_model, "base_url": self.base_url or os.getenv("OLLAMA_HOST", "http://192.168.0.124:11434")},
+            "ollama": {
+                "model": self.current_model,
+                "base_url": self.base_url or os.getenv("OLLAMA_HOST", "http://192.168.0.124:11434"),
+                "api_key": ollama_api_key,
+            },
             "openai": {"model": os.getenv("OPENAI_MODEL", "gpt-4o-mini")},
             "anthropic": {"model": os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-20250514")},
         }

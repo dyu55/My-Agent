@@ -5,13 +5,17 @@ from pathlib import Path
 from typing import Any
 
 from .base import BaseTool, ToolResult
+from .rollback_tools import RollbackManager
 
 
 class FileTools:
     """Container for file operation tools."""
 
-    def __init__(self, workspace: str):
+    def __init__(self, workspace: str, enable_rollback: bool = True):
         self.workspace = workspace
+        self.rollback_enabled = enable_rollback
+        self._rollback_manager = RollbackManager() if enable_rollback else None
+        self._pending_edits: dict[str, str] = {}  # Track pending edits for potential rollback
 
     def _resolve_path(self, path: str | None) -> str:
         """Resolve a path to be within the workspace."""
@@ -41,10 +45,25 @@ class FileTools:
             if target.startswith("Error:"):
                 return ToolResult.err(target, f"Error: {target}")
 
+            # Backup existing file before overwriting
+            if self._rollback_manager and Path(target).exists():
+                self._rollback_manager.backup(target)
+                self._pending_edits[target] = target
+
             Path(target).parent.mkdir(parents=True, exist_ok=True)
             Path(target).write_text(content, encoding="utf-8")
+
+            # Commit the backup (successful write)
+            if target in self._pending_edits:
+                self._rollback_manager.commit(target)
+                del self._pending_edits[target]
+
             return ToolResult.ok(f"Success: File {path} written")
         except Exception as e:
+            # Rollback on error
+            if self._rollback_manager and target in self._pending_edits:
+                self._rollback_manager.rollback(target)
+                del self._pending_edits[target]
             return ToolResult.err(f"Error writing file: {str(e)}", f"Error writing file: {str(e)}")
 
     def edit_file(self, action: dict[str, Any]) -> ToolResult:
@@ -68,12 +87,27 @@ class FileTools:
                     "Error: old_text not found in file"
                 )
 
+            # Backup before edit
+            if self._rollback_manager:
+                self._rollback_manager.backup(target)
+                self._pending_edits[target] = target
+
             new_content = file_content.replace(old_text, content, 1)
             Path(target).write_text(new_content, encoding="utf-8")
+
+            # Commit the backup (successful edit)
+            if target in self._pending_edits:
+                self._rollback_manager.commit(target)
+                del self._pending_edits[target]
+
             return ToolResult.ok(f"Success: File {path} edited")
         except FileNotFoundError:
             return ToolResult.err(f"File not found: {path}", f"Error: File not found: {path}")
         except Exception as e:
+            # Rollback on error
+            if self._rollback_manager and target in self._pending_edits:
+                self._rollback_manager.rollback(target)
+                del self._pending_edits[target]
             return ToolResult.err(f"Error editing file: {str(e)}", f"Error editing file: {str(e)}")
 
     def read_file(self, action: dict[str, Any]) -> ToolResult:

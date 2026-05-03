@@ -146,6 +146,7 @@ def run_cli(args: argparse.Namespace) -> int:
         provider=provider,
         base_url=base_url,
         api_key=os.environ.get("OPENAI_API_KEY"),
+    )
 
     try:
         cli.run()
