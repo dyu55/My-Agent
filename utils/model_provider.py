@@ -306,6 +306,7 @@ class ModelManager:
 
         Args:
             prompt: The prompt to send
+            timeout: Request timeout in seconds (default 30)
             **kwargs: Additional parameters (temperature, etc.)
 
         Returns:
@@ -313,6 +314,16 @@ class ModelManager:
         """
         if self._provider is None:
             self._init_provider()
+
+        timeout = kwargs.pop("timeout", 30)
+
+        if isinstance(self._provider, OllamaProvider):
+            original_timeout = self._provider.timeout
+            self._provider.timeout = timeout
+            try:
+                return self._provider.chat(prompt, **kwargs)
+            finally:
+                self._provider.timeout = original_timeout
 
         return self._provider.chat(prompt, **kwargs)
 
