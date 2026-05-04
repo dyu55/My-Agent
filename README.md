@@ -186,13 +186,8 @@ MODEL_NAME=gemma4:latest
 # Ollama endpoint
 OLLAMA_HOST=http://localhost:11434
 
-# Ollama Cloud (optional)
+# Optional: Ollama Cloud API key
 # OLLAMA_API_KEY=your-api-key
-
-# Custom OpenAI-compatible endpoint (optional)
-# RSXERMU_BASE_URL=https://rsxermu666.cn
-# RSXERMU_API_KEY=your-api-key
-# RSXERMU_MODEL=gemma4:latest
 ```
 
 ## Development
