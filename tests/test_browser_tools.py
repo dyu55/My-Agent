@@ -59,7 +59,7 @@ class TestBrowserTools:
     def test_close_when_not_started(self, browser):
         """Test closing browser when not started."""
         result = browser.close()
-        assert result.is_ok()
+        assert result.success
         assert "closed" in result.output.lower()
 
 
@@ -78,14 +78,14 @@ class TestSimpleBrowserTools:
     def test_fetch_missing_url(self, browser):
         """Test fetch without URL returns error."""
         result = browser.fetch({})
-        assert result.is_err()
+        assert not result.success
         assert "url" in result.output.lower()
 
     def test_fetch_with_url_check(self, browser):
         """Test fetch with invalid URL returns error."""
         result = browser.fetch({"url": "not-a-valid-url"})
         # Should fail with connection/request error
-        assert result.is_err()
+        assert not result.success
 
 
 class TestToolHandlers:
@@ -123,7 +123,7 @@ class TestIntegration:
 
         # close_browser should work even without browser started
         result = handlers["close_browser"]({})
-        assert result.is_ok()
+        assert result.success
 
     def test_simple_handler_integration(self, tmp_path):
         """Test simple browser handlers."""
@@ -131,4 +131,4 @@ class TestIntegration:
 
         # Test with invalid URL
         result = handlers["fetch"]({"url": "invalid"})
-        assert result.is_err()  # Should fail, not crash
+        assert not result.success  # Should fail, not crash
