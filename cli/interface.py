@@ -1,7 +1,10 @@
 """Interactive CLI interface for chatting with the model."""
 
 import os
+import select
 import sys
+import tty
+import termios
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -59,7 +62,7 @@ class CLIInterface:
 
     Features:
     - Dual modes: CHAT (direct model) and TASK (agent execution)
-    - /mode command to switch between modes
+    - Shift+Tab to switch between modes
     - Command handling (/help, /model, etc.)
     - Chat history management
     - Multi-model support (Ollama, OpenAI, Anthropic)
@@ -164,10 +167,12 @@ class CLIInterface:
         print(f"📦 模型: {self.model_manager.get_status()}")
         print(f"📁 工作目录: {self.workspace}\n")
 
+        # Check if we can use raw mode (stdin is a real TTY)
+        self._can_raw_mode = sys.stdin.isatty()
+
         while self.is_running:
             try:
-                prompt = self._get_prompt()
-                user_input = input(prompt).strip()
+                user_input = self._read_input()
                 if not user_input:
                     continue
 
@@ -182,6 +187,93 @@ class CLIInterface:
                 print(f"\n❌ 错误: {e}")
 
         self.is_running = False
+
+    def _read_input(self) -> str:
+        """Read input, with Shift+Tab mode switching if available."""
+        prompt = self._get_prompt()
+
+        # Use raw mode only if stdin is a TTY
+        if self._can_raw_mode:
+            return self._read_input_raw(prompt)
+        else:
+            return input(prompt).strip()
+
+    def _read_input_raw(self, prompt: str) -> str:
+        """Read input with raw mode for Shift+Tab detection."""
+        fd = sys.stdin.fileno()
+        old_settings = termios.tcgetattr(fd)
+        tty.setcbreak(fd)
+
+        try:
+            print(prompt, end="", flush=True)
+
+            line = ""
+            cursor_pos = 0
+
+            while True:
+                ch = sys.stdin.read(1)
+
+                # Check for Shift+Tab (ESC [ Z)
+                if ch == "\x1b":
+                    seq = ch
+                    # Peek ahead without consuming (use select-like approach)
+                    import select
+                    if select.select([sys.stdin], [], [], 0.1)[0]:
+                        ch2 = sys.stdin.read(1)
+                        seq += ch2
+                        if ch2 == "[":
+                            if select.select([sys.stdin], [], [], 0.1)[0]:
+                                ch3 = sys.stdin.read(1)
+                                seq += ch3
+                                if ch3 == "Z":
+                                    # Shift+Tab!
+                                    self._switch_mode()
+                                    # Clear line and show new state
+                                    sys.stdout.write("\r" + " " * 80 + "\r")
+                                    print(self._get_banner())
+                                    print(f"📦 模型: {self.model_manager.get_status()}")
+                                    print(f"📁 工作目录: {self.workspace}\n")
+                                    print(prompt, end="", flush=True)
+                                    line = ""
+                                    cursor_pos = 0
+                                    continue
+                        else:
+                            # Not Shift+Tab, treat ESC as regular input
+                            pass
+
+                # Enter
+                if ch == "\r" or ch == "\n":
+                    print()
+                    break
+
+                # Backspace
+                if ch == "\x7f" or ch == "\x08":
+                    if cursor_pos > 0:
+                        line = line[:cursor_pos - 1] + line[cursor_pos:]
+                        cursor_pos -= 1
+                        print("\b \b", end="", flush=True)
+                    continue
+
+                # Ctrl+C
+                if ch == "\x03":
+                    print("^C")
+                    return ""
+
+                # Tab - fallback to standard input
+                if ch == "\t":
+                    termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+                    return input().strip()
+
+                # Regular printable characters
+                if ch and ch.isprintable():
+                    line = line[:cursor_pos] + ch + line[cursor_pos:]
+                    cursor_pos += 1
+                    print(ch, end="", flush=True)
+
+        finally:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+
+        return line.strip()
 
     def _switch_mode(self) -> None:
         """Switch between CHAT and TASK modes."""
@@ -198,16 +290,13 @@ class CLIInterface:
 
     def _process_input(self, user_input: str) -> None:
         """Process user input based on current mode."""
-        # Skip empty input
         if not user_input.strip():
             return
 
-        # Check for commands first (works in all modes)
         if user_input.startswith("/"):
             self._handle_command(user_input)
             return
 
-        # Non-command input: route based on mode
         if self.current_mode == Mode.CHAT:
             self._handle_chat(user_input)
         else:
@@ -219,12 +308,10 @@ class CLIInterface:
         cmd_name = parts[0]
         args = parts[1].split() if len(parts) > 1 else []
 
-        # Handle /mode switch
         if cmd_name.lstrip("/") in ["mode"]:
             self._switch_mode()
             return
 
-        # Handle /task in TASK mode or explicitly
         if cmd_name.lstrip("/") in ["task", "t"]:
             if args:
                 self._execute_task(" ".join(args))
@@ -232,7 +319,6 @@ class CLIInterface:
                 print("❌ 请提供任务描述: /task <描述>")
             return
 
-        # Handle model/provider via command handler
         if cmd_name.lstrip("/") in ["model", "m"]:
             self.commands._cmd_model(self.context, args)
             return
@@ -241,7 +327,6 @@ class CLIInterface:
             self.commands._cmd_provider(self.context, args)
             return
 
-        # Find and execute command
         cmd = self.commands.find(cmd_name)
         if cmd and cmd.handler:
             cmd.handler(self.context, args)
@@ -251,26 +336,18 @@ class CLIInterface:
 
     def _handle_chat(self, user_input: str) -> None:
         """Handle chat message (direct model conversation)."""
-        print()  # Spacing
+        print()
 
-        # Add to history
         self.history.add("user", user_input)
 
-        # Build prompt from history
         prompt = self.SYSTEM_PROMPT
         for msg in self.history.get_recent(10):
             prompt += f"\n\n{msg.role.upper()}: {msg.content}"
 
         try:
-            # Send to model
             response = self.model_manager.chat(prompt)
-
-            # Print response
             print(response)
-
-            # Add response to history
             self.history.add("assistant", response)
-
         except Exception as e:
             print(f"❌ LLM 调用失败: {e}")
             print("   请检查模型服务是否运行中")
@@ -335,7 +412,6 @@ def main():
 
     args = parser.parse_args()
 
-    # Determine base URL based on provider
     if args.base_url:
         base_url = args.base_url
     elif args.provider == "ollama":
@@ -343,7 +419,6 @@ def main():
     else:
         base_url = "http://localhost:11434"
 
-    # Parse default mode
     default_mode = Mode.TASK if args.mode == "task" else Mode.CHAT
 
     cli = CLIInterface(
