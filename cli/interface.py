@@ -170,8 +170,12 @@ class CLIInterface:
         print(f"📦 模型: {self.model_manager.get_status()}")
         print(f"📁 工作目录: {self.workspace}\n")
 
-        # Save terminal settings
-        self._old_settings = termios.tcgetattr(sys.stdin)
+        # Save terminal settings if available
+        self._old_settings = None
+        try:
+            self._old_settings = termios.tcgetattr(sys.stdin)
+        except Exception:
+            pass  # Not available (e.g., piped/redirected stdin)
 
         while self.is_running:
             try:
@@ -200,8 +204,19 @@ class CLIInterface:
         prompt = self._get_prompt()
         print(prompt, end="", flush=True)
 
+        # Check if termios works (some environments don't support raw mode on stdin)
+        try:
+            fd = sys.stdin.fileno()
+            termios.tcgetattr(fd)  # Test if this raises
+            termios_available = True
+        except Exception:
+            termios_available = False
+
+        if not termios_available or self._old_settings is None:
+            # Fallback: use standard input
+            return input().strip()
+
         # Setup terminal for raw character input
-        fd = sys.stdin.fileno()
         tty.setcbreak(fd)
 
         line = ""
