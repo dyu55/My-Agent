@@ -28,11 +28,19 @@ import os
 import readline
 import sys
 from pathlib import Path
+from enum import Enum
 from typing import Optional
 
 from agent import AgentEngine
 from agent.engine import AgentConfig
 from agent.external_memory_integration import create_external_memory_manager
+
+
+class Mode(Enum):
+    """CLI operating mode."""
+
+    CHAT = "chat"
+    TASK = "task"
 
 
 class MichaelCLI:
@@ -52,12 +60,12 @@ class MichaelCLI:
 ║                                                                            ║
 ║   🤖 {name} - Local Coding Agent                                          ║
 ║                                                                            ║
-║   Enter task description to execute, for example:                          ║
-║   → "Implement user login functionality"                                   ║
-║   → "Refactor auth.py module"                                              ║
-║   → "Add unit test coverage"                                               ║
+║   💬 CHAT: 直接对话，回答问题，写文档                                     ║
+║   🎯 TASK: Agent 执行，分解任务，写代码、跑测试                          ║
 ║                                                                            ║
-║   Commands: /help for all commands                                         ║
+║   {mode_indicator}                                                         ║
+║                                                                            ║
+║   Commands: /help for all commands, /mode to switch modes                 ║
 ║                                                                            ║
 ╚════════════════════════════════════════════════════════════════════════════╝
 """
@@ -82,6 +90,7 @@ class MichaelCLI:
 
         self.agent: Optional[AgentEngine] = None
         self.external_memory = create_external_memory_manager(str(self.workspace))
+        self.current_mode = Mode.TASK  # TASK mode for agent execution by default
 
         self.is_running = False
         self.current_task: Optional[str] = None
@@ -102,7 +111,12 @@ class MichaelCLI:
 
     def _get_banner(self) -> str:
         """Get custom banner with CLI name."""
-        return self.DEFAULT_BANNER.format(name=self.cli_name)
+        mode_info = {
+            Mode.CHAT: "💬 [CHAT] 直接对话模式 - 输入问题直接调用模型",
+            Mode.TASK: "🎯 [TASK] 任务执行模式 - 输入任务让 Agent 执行",
+        }
+        mode_indicator = mode_info[self.current_mode]
+        return self.DEFAULT_BANNER.format(name=self.cli_name, mode_indicator=mode_indicator)
 
     def run(self) -> None:
         """Start interactive CLI"""
@@ -142,7 +156,12 @@ class MichaelCLI:
     def _read_input(self) -> str:
         """Read input"""
         try:
-            prompt = f"🎯 " if not self.current_task else f"🔄 "
+            if self.current_mode == Mode.CHAT:
+                prompt = "💬 "
+            elif self.current_task:
+                prompt = "🔄 "
+            else:
+                prompt = "🎯 "
             return input(prompt).strip()
         except (KeyboardInterrupt, EOFError):
             raise
@@ -158,8 +177,39 @@ class MichaelCLI:
             self._handle_command(user_input)
             return
 
-        # Direct task execution (most common case)
-        self._execute_task(user_input)
+        # Route based on mode
+        if self.current_mode == Mode.CHAT:
+            self._handle_chat(user_input)
+        else:
+            self._execute_task(user_input)
+
+    def _handle_chat(self, user_input: str) -> None:
+        """Handle chat mode - direct model conversation."""
+        from utils.model_provider import ModelManager
+
+        print()
+
+        # Build prompt with history
+        prompt = """你是一个有帮助的 AI 助手。用户正在通过 CLI 与你对话。
+
+你可以:
+- 回答问题
+- 帮助调试代码
+- 解释概念
+- 提供建议
+
+尽量简洁明了。"""
+
+        try:
+            model_manager = ModelManager(
+                default_provider=self.provider,
+                default_model=self.model,
+            )
+            response = model_manager.chat(prompt + f"\n\n用户: {user_input}")
+            print(response)
+        except Exception as e:
+            print(f"❌ LLM 调用失败: {e}")
+            print("   请检查模型服务是否运行中")
 
     def _handle_command(self, user_input: str) -> None:
         """Handle command"""
@@ -170,6 +220,7 @@ class MichaelCLI:
         handlers = {
             "task": self._cmd_task,
             "t": self._cmd_task,
+            "mode": self._switch_mode,
             "edit": self._cmd_edit,
             "read": self._cmd_read,
             "run": self._cmd_run,
@@ -397,6 +448,15 @@ External Memory:
         """Exit"""
         print("\n👋 Goodbye!")
         self.is_running = False
+
+    def _switch_mode(self) -> None:
+        """Switch between CHAT and TASK modes."""
+        if self.current_mode == Mode.CHAT:
+            self.current_mode = Mode.TASK
+            print("\n🎯 [TASK] 已切换到任务执行模式 - 输入任务描述执行")
+        else:
+            self.current_mode = Mode.CHAT
+            print("\n💬 [CHAT] 已切换到直接对话模式 - 输入问题直接调用模型回答")
 
     def _cmd_external_memory(self, args: str) -> None:
         """External memory command"""
