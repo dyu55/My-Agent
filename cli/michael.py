@@ -187,6 +187,7 @@ class MichaelCLI:
         """Handle chat mode - direct model conversation."""
         from utils.model_provider import ModelManager
         import requests
+        import urllib3
 
         print()
 
@@ -206,18 +207,23 @@ class MichaelCLI:
                 default_provider=self.provider,
                 default_model=self.model,
             )
-            # Try with longer timeout for remote server
+            # Try with reasonable timeout for remote model
             response = model_manager.chat(
                 prompt + f"\n\n用户: {user_input}",
-                timeout=60  # 60 second timeout
+                timeout=45  # 45 second timeout for remote model
             )
             print(response)
-        except requests.exceptions.Timeout:
-            print(f"❌ LLM 调用超时 (60s)")
-            print("   请尝试切换到 TASK 模式，输入任务让 Agent 执行")
+        except (
+            requests.exceptions.Timeout,
+            requests.exceptions.ReadTimeout,
+            urllib3.exceptions.TimeoutError,
+            TimeoutError,
+        ):
+            print(f"❌ LLM 调用超时/连接失败")
+            print("   请检查 Ollama 服务是否运行: curl http://192.168.0.124:11434/api/tags")
+            print("   或切换到 TASK 模式，输入任务让 Agent 执行")
         except Exception as e:
             print(f"❌ LLM 调用失败: {e}")
-            print("   请检查模型服务是否运行中")
 
     def _handle_command(self, user_input: str) -> None:
         """Handle command"""

@@ -260,7 +260,7 @@ class ModelManager:
         provider_config = {
             "ollama": {
                 "model": self.current_model,
-                "base_url": self.base_url or os.getenv("OLLAMA_HOST", "http://192.168.0.124:11434"),
+                "base_url": self.base_url or os.getenv("OLLAMA_HOST", "http://localhost:11434"),
                 "api_key": ollama_api_key,
             },
             "openai": {"model": os.getenv("OPENAI_MODEL", "gpt-4o-mini")},
