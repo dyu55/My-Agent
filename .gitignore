@@ -21,5 +21,34 @@ memory/memories.json
 .coverage
 htmlcov/
 
+# Model files (large, local)
+python-code-18k/
+qwen3.5-9b-code-*/
+
+# Test logs and benchmarks
+tests/*.log
+tests/results_*.json
+tests/model_comparison_*.html
+tests/model_*.md
+tests/test_*.md
+
+# Test scripts (optional - uncomment if not needed)
+# run_*.sh
+# tests/run_tests.sh
+
+# Workspace test artifacts
+workspace/workspace/
+workspace/tests/
+workspace/comprehensive_test/
+workspace/deploy_test/
+workspace/executor_test/
+workspace/file_ops/
+workspace/git_test/
+
+# ChromaDB and memory data
+memory/chroma_db/
+memory/patterns/
+
 # Workspace temp files
 workspace/__pycache__/
+workspace/memory/session_logs/
