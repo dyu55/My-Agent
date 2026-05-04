@@ -449,7 +449,7 @@ External Memory:
         print("\n👋 Goodbye!")
         self.is_running = False
 
-    def _switch_mode(self) -> None:
+    def _switch_mode(self, args: str) -> None:
         """Switch between CHAT and TASK modes."""
         if self.current_mode == Mode.CHAT:
             self.current_mode = Mode.TASK
