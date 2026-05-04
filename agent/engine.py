@@ -1,5 +1,7 @@
 """Agent Engine - Core agent loop integrating Plan/Act/Reflect."""
 
+from __future__ import annotations
+
 import json
 import logging
 import os
@@ -7,7 +9,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from .planner import ExecutionPlan, TaskPlanner, TaskStatus
 from .executor import Action, ExecutionResult, ExecutionStatus, ToolExecutor
@@ -65,7 +67,7 @@ class AgentConfig:
     """Configuration for the agent."""
 
     workspace: Path
-    model: str = "gemma4:latest"
+    model: str = "qwen3.5:9b"
     provider: str = "ollama"
     base_url: str = "http://localhost:11434"
     api_key: str | None = None
@@ -73,6 +75,8 @@ class AgentConfig:
     max_plan_retries: int = 2
     enable_llm_reflection: bool = True
     trace_enabled: bool = True
+    # Callback for live progress updates (phase, task_desc, elapsed_seconds)
+    progress_callback: Callable | None = None
 
 
 @dataclass
@@ -219,6 +223,10 @@ class AgentEngine:
 
         self._log("agent_start", {"task": task})
 
+        # Report progress to callback
+        if self.config.progress_callback:
+            self.config.progress_callback("plan", "分析任务...", 0)
+
         # Phase 1: Plan - Create execution plan
         plan = self._create_plan(task)
         self.state.current_plan = plan
@@ -252,6 +260,10 @@ class AgentEngine:
         plan = self.planner.create_plan(task, context)
         self._log("plan_created", plan.to_dict())
 
+        # Report plan completion to callback
+        if self.config.progress_callback:
+            self.config.progress_callback("act", f"开始执行 {len(plan.subtasks)} 个子任务", 0)
+
         return plan
 
     def _get_project_context(self) -> str:
@@ -281,6 +293,10 @@ class AgentEngine:
 
         self.progress.set_phase("act")
         self.progress.update_task(task.description)
+
+        # Report progress to callback
+        if self.config.progress_callback:
+            self.config.progress_callback("act", task.description[:50], 0)
 
         # Generate action for this task
         action = self._generate_action(task)
@@ -403,6 +419,15 @@ execute: {{"command": "execute", "script": "python 文件名.py", "path": "工�
             is_error=is_error,
             context=task_desc,
         )
+
+        # Report reflect phase to callback
+        if self.config.progress_callback:
+            phase = "reflect"
+            if is_error:
+                phase = f"error"
+            elif reflection.is_successful:
+                phase = "done"
+            self.config.progress_callback(phase, task_desc[:50], 0)
 
         # Record in memory
         self.memory.add("assistant", f"Task: {task_desc}\nAction: {exec_result.command}")

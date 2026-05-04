@@ -27,6 +27,8 @@ Shortcuts:
 import os
 import readline
 import sys
+import threading
+import time
 from pathlib import Path
 from enum import Enum
 from typing import Optional
@@ -41,6 +43,69 @@ class Mode(Enum):
 
     CHAT = "chat"
     TASK = "task"
+
+
+class LiveStatusBar:
+    """Live status bar showing progress during LLM calls."""
+
+    STATES = ["⠋", "⠙", "⠹", "⠸", "⠴", "⠦", "⠧", "⠇"]
+    PHASES = ["plan", "act", "reflect"]
+
+    def __init__(self):
+        self.running = False
+        self._thread: threading.Thread | None = None
+        self._state_idx = 0
+        self._start_time: float = 0
+        self._phase = "thinking"
+        self._task_desc = ""
+        self._lock = threading.Lock()
+
+    def start(self, task_desc: str = ""):
+        """Start the status bar animation."""
+        self._task_desc = task_desc
+        self._start_time = time.time()
+        self._state_idx = 0
+        self.running = True
+        self._thread = threading.Thread(target=self._animate, daemon=True)
+        self._thread.start()
+
+    def set_phase(self, phase: str):
+        """Update the current phase."""
+        with self._lock:
+            self._phase = phase
+
+    def stop(self):
+        """Stop the status bar."""
+        self.running = False
+        if self._thread:
+            self._thread.join(timeout=1.0)
+        # Clear the line
+        print("\r" + " " * 80 + "\r", end="", flush=True)
+
+    def _animate(self):
+        """Animation loop running in background thread."""
+        while self.running:
+            with self._lock:
+                state = self.STATES[self._state_idx % len(self.STATES)]
+                phase = self._phase
+                elapsed = time.time() - self._start_time
+                self._state_idx += 1
+
+            elapsed_str = self._format_time(elapsed)
+            line = f"\r{state} {phase.upper()} [{elapsed_str}]"
+            if self._task_desc:
+                line += f" - {self._task_desc[:40]}"
+            print(line, end="", flush=True)
+            time.sleep(0.15)
+
+    def _format_time(self, seconds: float) -> str:
+        """Format elapsed time."""
+        if seconds < 60:
+            return f"{int(seconds)}s"
+        elif seconds < 3600:
+            return f"{int(seconds // 60)}m {int(seconds % 60)}s"
+        else:
+            return f"{int(seconds // 3600)}h {int((seconds % 3600) // 60)}m"
 
 
 class MichaelCLI:
@@ -73,7 +138,7 @@ class MichaelCLI:
     def __init__(
         self,
         workspace: Path | str = "workspace",
-        model: str = "gemma4:latest",
+        model: str = "qwen3.5:9b",
         provider: str = "ollama",
         base_url: str = "http://localhost:11434",
         api_key: Optional[str] = None,
@@ -95,6 +160,7 @@ class MichaelCLI:
         self.is_running = False
         self.current_task: Optional[str] = None
         self.task_count = 0
+        self.status_bar = LiveStatusBar()
 
         self._init_agent()
 
@@ -106,8 +172,22 @@ class MichaelCLI:
             base_url=self.base_url,
             api_key=self.api_key,
             workspace=self.workspace,  # Path object
+            progress_callback=self._on_progress,
         )
         self.agent = AgentEngine(config)
+
+    def _on_progress(self, phase: str, task_desc: str, elapsed: float):
+        """Callback for live progress updates from the agent."""
+        if phase == "plan":
+            self.status_bar.set_phase("plan")
+        elif phase == "act":
+            self.status_bar.set_phase("act")
+        elif phase == "reflect":
+            self.status_bar.set_phase("reflect")
+        elif phase.startswith("error"):
+            self.status_bar.set_phase("error")
+        elif phase == "done":
+            self.status_bar.set_phase("done")
 
     def _get_banner(self) -> str:
         """Get custom banner with CLI name."""
@@ -274,8 +354,14 @@ class MichaelCLI:
             # Start external memory workflow
             self.external_memory.start_workflow(task)
 
+            # Start live status bar
+            self.status_bar.start(task[:50])
+
             # Execute task
             result = self.agent.run(task)
+
+            # Stop status bar
+            self.status_bar.stop()
 
             # Add checkpoint
             self.external_memory.add_checkpoint(
@@ -294,6 +380,8 @@ class MichaelCLI:
             self._prompt_git_commit()
 
         except KeyboardInterrupt:
+            # Stop status bar
+            self.status_bar.stop()
             print("\n\n⚠️  Task cancelled")
             self.external_memory.add_checkpoint(
                 "write_code",
@@ -302,6 +390,8 @@ class MichaelCLI:
                 {}
             )
         except Exception as e:
+            # Stop status bar
+            self.status_bar.stop()
             print(f"\n❌ Task failed: {e}")
             self.external_memory.add_checkpoint(
                 "write_code",

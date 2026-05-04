@@ -1,7 +1,7 @@
 {
   "version": "1.0",
   "created_at": "2026-04-23T00:00:00.000000",
-  "updated_at": "2026-05-02T00:00:00.000000",
+  "updated_at": "2026-05-03T00:00:00.000000",
   "metadata": {
     "project_name": "MyAgent",
     "description": "本地 Coding Agent - Skills系统增强",
@@ -77,6 +77,44 @@
         }
       ],
       "created_at": "2026-05-02T00:00:00.000000"
+    },
+    {
+      "id": "feat_live_status",
+      "name": "CLI实时状态条",
+      "description": "实时显示任务执行阶段、当前步骤、运行时间",
+      "priority": 1,
+      "status": "completed",
+      "tasks": [
+        {
+          "id": "feat_live_status_01",
+          "name": "实现LiveStatusBar",
+          "description": "单行状态条显示phase/任务/时间",
+          "status": "completed",
+          "created_at": "2026-05-03T00:00:00.000000"
+        },
+        {
+          "id": "feat_live_status_02",
+          "name": "集成AgentConfig",
+          "description": "添加progress_callback到AgentConfig",
+          "status": "completed",
+          "created_at": "2026-05-03T00:00:00.000000"
+        },
+        {
+          "id": "feat_live_status_03",
+          "name": "AgentEngine回调",
+          "description": "在plan/act/reflect阶段调用callback",
+          "status": "completed",
+          "created_at": "2026-05-03T00:00:00.000000"
+        },
+        {
+          "id": "feat_live_status_04",
+          "name": "MichaelCLI集成",
+          "description": "创建status_bar实例并连接callback",
+          "status": "completed",
+          "created_at": "2026-05-03T00:00:00.000000"
+        }
+      ],
+      "created_at": "2026-05-03T00:00:00.000000"
     }
   ],
   "sessions": []
