@@ -2,9 +2,6 @@
 
 import os
 import sys
-import tty
-import termios
-import threading
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
@@ -62,7 +59,7 @@ class CLIInterface:
 
     Features:
     - Dual modes: CHAT (direct model) and TASK (agent execution)
-    - Shift+Tab to switch between modes
+    - /mode command to switch between modes
     - Command handling (/help, /model, etc.)
     - Chat history management
     - Multi-model support (Ollama, OpenAI, Anthropic)
@@ -143,9 +140,6 @@ class CLIInterface:
         self.is_running = False
         self.is_executing_task = False
 
-        # Terminal settings for raw mode
-        self._old_settings: termios.tcflag_t | None = None
-
     def _get_banner(self) -> str:
         """Generate banner with current mode indicator."""
         mode_info = self.MODES[self.current_mode]
@@ -170,16 +164,10 @@ class CLIInterface:
         print(f"📦 模型: {self.model_manager.get_status()}")
         print(f"📁 工作目录: {self.workspace}\n")
 
-        # Save terminal settings if available
-        self._old_settings = None
-        try:
-            self._old_settings = termios.tcgetattr(sys.stdin)
-        except Exception:
-            pass  # Not available (e.g., piped/redirected stdin)
-
         while self.is_running:
             try:
-                user_input = self._read_input()
+                prompt = self._get_prompt()
+                user_input = input(prompt).strip()
                 if not user_input:
                     continue
 
@@ -193,96 +181,7 @@ class CLIInterface:
             except Exception as e:
                 print(f"\n❌ 错误: {e}")
 
-        # Restore terminal settings
-        if self._old_settings:
-            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self._old_settings)
-
         self.is_running = False
-
-    def _read_input(self) -> str:
-        """Read input with Shift+Tab mode switching support."""
-        prompt = self._get_prompt()
-        print(prompt, end="", flush=True)
-
-        # Check if termios works (some environments don't support raw mode on stdin)
-        try:
-            fd = sys.stdin.fileno()
-            termios.tcgetattr(fd)  # Test if this raises
-            termios_available = True
-        except Exception:
-            termios_available = False
-
-        if not termios_available or self._old_settings is None:
-            # Fallback: use standard input
-            return input().strip()
-
-        # Setup terminal for raw character input
-        tty.setcbreak(fd)
-
-        line = ""
-        cursor_pos = 0
-
-        while True:
-            try:
-                ch = sys.stdin.read(1)
-
-                # Check for Shift+Tab (ESC [ Z)
-                if ch == "\x1b":
-                    # Read next chars to check for [Z
-                    seq = ch
-                    ch2 = sys.stdin.read(1)
-                    seq += ch2
-                    if ch2 == "[":
-                        ch3 = sys.stdin.read(1)
-                        seq += ch3
-                        if ch3 == "Z":
-                            # Shift+Tab detected!
-                            self._switch_mode()
-                            # Clear current line and print new banner
-                            print(f"\r{' ' * (len(prompt) + len(line) + 20)}\r")
-                            print(self._get_banner())
-                            print(f"📦 模型: {self.model_manager.get_status()}")
-                            print(f"📁 工作目录: {self.workspace}\n")
-                            print(prompt, end="", flush=True)
-                            line = ""
-                            cursor_pos = 0
-                            continue
-
-                # Handle Enter
-                if ch == "\r" or ch == "\n":
-                    print()
-                    break
-
-                # Handle backspace
-                if ch == "\x7f" or ch == "\x08":
-                    if cursor_pos > 0:
-                        line = line[:cursor_pos - 1] + line[cursor_pos:]
-                        cursor_pos -= 1
-                        print("\b \b", end="", flush=True)
-                    continue
-
-                # Handle Ctrl+C
-                if ch == "\x03":
-                    print("^C")
-                    return ""
-
-                # Handle Tab - fall back to standard input
-                if ch == "\t":
-                    # Tab pressed, restore terminal and use standard input
-                    termios.tcsetattr(fd, termios.TCSADRAIN, self._old_settings)
-                    return input().strip()
-
-                # Handle regular characters
-                if ch and ch.isprintable():
-                    line = line[:cursor_pos] + ch + line[cursor_pos:]
-                    cursor_pos += 1
-                    print(ch, end="", flush=True)
-
-            except (KeyboardInterrupt, EOFError):
-                print()
-                break
-
-        return line.strip()
 
     def _switch_mode(self) -> None:
         """Switch between CHAT and TASK modes."""
