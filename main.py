@@ -64,7 +64,7 @@ Examples:
     parser.add_argument(
         "--provider",
         "-p",
-        choices=["ollama", "openai", "anthropic"],
+        choices=["ollama", "openai", "anthropic", "deepseek", "gemini"],
         help="Provider to use (overrides ACTIVE_PROVIDER env var)",
     )
     parser.add_argument(
@@ -97,11 +97,14 @@ def list_providers() -> None:
     print("Available providers:")
     print("  - ollama: Local Ollama server (default: http://localhost:11434)")
     print("  - openai: OpenAI API")
+    print("  - anthropic: Anthropic API (Claude)")
+    print("  - deepseek: DeepSeek API")
     print()
     print("Environment variables:")
     print("  OLLAMA_HOST: Ollama server URL (default: http://localhost:11434)")
     print("  MODEL_NAME: 模型名称 (默认: gemma4:latest)")
     print("  OPENAI_API_KEY: OpenAI API key")
+    print("  DEEPSEEK_API_KEY: DeepSeek API key")
 
 
 def create_agent(args: argparse.Namespace) -> AgentEngine:

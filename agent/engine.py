@@ -117,9 +117,11 @@ class LLMClient:
             )
         return self._model_manager
 
-    def chat(self, prompt: str, schema: dict[str, Any] | None = None) -> str:
+    def chat(self, prompt: str, schema: dict[str, Any] | None = None, **kwargs) -> str:
         """Send a chat request to the LLM."""
-        return self._get_model_manager().chat(prompt)
+        if schema:
+            kwargs["schema"] = schema
+        return self._get_model_manager().chat(prompt, **kwargs)
 
     def switch_model(self, provider: str, model: str | None = None) -> bool:
         """
@@ -346,7 +348,8 @@ execute: {{"command": "execute", "script": "python 文件名.py", "path": "工�
 """
 
         try:
-            response = self.llm.chat(prompt, schema={"type": "json_object"})
+            messages = self.memory.build_messages(system_prompt=prompt)
+            response = self.llm.chat(prompt, messages=messages, schema={"type": "json_object"})
 
             # Extract JSON from markdown code blocks
             data = _extract_json_from_response(response)

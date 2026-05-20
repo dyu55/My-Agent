@@ -110,7 +110,54 @@ class ResultReflector:
         Returns:
             Reflection with classification and suggestions
         """
+        # Read-only query commands
+        read_only_commands = {
+            "read", "search", "search_web", "web_fetch", "list_dir", "list_files",
+            "check_dependencies", "analyze_imports", "git", "debug", "discover_tests"
+        }
+        # Keywords indicating a task expects writing/modification
+        write_keywords = {"implement", "create", "write", "fix", "add", "update", "modify", "delete", "setup", "integrate"}
+        
+        is_read_only_action = action_command in read_only_commands
+        is_write_task = any(kw in context.lower() for kw in write_keywords) if context else False
+
         if not is_error and not execution_output.startswith("Error"):
+            # 1. Read-only command on a write task
+            if is_read_only_action and is_write_task:
+                suggestion = (
+                    f"The task '{context}' requires implementing or writing code, "
+                    f"but you only ran a read-only command '{action_command}'. "
+                    "Please use write or edit tools to implement the required changes in the codebase."
+                )
+                reflection = Reflection(
+                    is_successful=False,
+                    error_category=ErrorCategory.LOGIC_ERROR,
+                    error_message="Read-only action performed on a write task.",
+                    suggestion=suggestion,
+                    should_retry=True,
+                    should_abandon=False,
+                )
+                self.reflection_history.append(reflection)
+                return reflection
+
+            # 2. Failed test run
+            if action_command == "run_tests" and ("failed" in execution_output.lower() or "exit code:" in execution_output.lower()):
+                suggestion = (
+                    "Tests execution failed. Please inspect the test failure output "
+                    "and fix the implementation/tests accordingly."
+                )
+                reflection = Reflection(
+                    is_successful=False,
+                    error_category=ErrorCategory.LOGIC_ERROR,
+                    error_message="Test verification failed.",
+                    suggestion=suggestion,
+                    should_retry=True,
+                    should_abandon=False,
+                )
+                self.reflection_history.append(reflection)
+                return reflection
+
+            # 3. Otherwise, indeed a success
             reflection = Reflection(
                 is_successful=True,
                 error_category=None,

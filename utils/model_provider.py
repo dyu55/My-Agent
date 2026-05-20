@@ -195,6 +195,131 @@ class AnthropicProvider(BaseModelProvider):
         ]
 
 
+class DeepSeekProvider(BaseModelProvider):
+    """DeepSeek API provider."""
+
+    def __init__(
+        self,
+        model: str = "deepseek-chat",
+        api_key: str | None = None,
+        base_url: str = "https://api.deepseek.com",
+    ):
+        self.model = model
+        self.api_key = api_key or os.getenv("DEEPSEEK_API_KEY", "")
+        self.base_url = base_url
+
+        from openai import OpenAI
+        self.client = OpenAI(base_url=base_url, api_key=self.api_key)
+
+    def chat(self, prompt: str, **kwargs) -> str:
+        """Send a chat request to DeepSeek."""
+        messages = [{"role": "user", "content": prompt}]
+
+        kwargs.setdefault("model", self.model)
+        kwargs.setdefault("messages", messages)
+
+        response = self.client.chat.completions.create(**kwargs)
+        return response.choices[0].message.content or ""
+
+    def list_models(self) -> list[ModelInfo]:
+        """List available DeepSeek models."""
+        return [
+            ModelInfo(name="deepseek-chat", provider="deepseek", description="General chat model"),
+            ModelInfo(name="deepseek-coder", provider="deepseek", description="Code generation model"),
+            ModelInfo(name="deepseek-reasoner", provider="deepseek", description="Reasoning model"),
+            ModelInfo(name="deepseek-v4-pro", provider="deepseek", description="Latest Pro model"),
+        ]
+
+
+class GeminiProvider(BaseModelProvider):
+    """Google AI Gemini API provider."""
+
+    def __init__(
+        self,
+        model: str = "gemini-2.5-pro-preview-06-05",
+        api_key: str | None = None,
+    ):
+        self.model = model
+        self.api_key = api_key or os.getenv("GEMINI_API_KEY", "")
+        self.base_url = "https://generativelanguage.googleapis.com"
+
+        try:
+            import google.genai as genai
+        except ImportError:
+            try:
+                from google import genai
+            except ImportError:
+                raise ImportError(
+                    "google-genai not installed. Install with: pip install google-genai"
+                )
+        self.client = genai.Client(api_key=self.api_key)
+
+    def chat(self, prompt: str, **kwargs) -> str:
+        """Send a chat request to Gemini."""
+        kwargs.setdefault("model", self.model)
+
+        # Handle messages format - convert to Gemini content
+        if "messages" in kwargs:
+            messages = kwargs.pop("messages")
+            # Convert messages to a single content string
+            content_parts = []
+            for msg in messages:
+                role = msg.get("role", "user")
+                text = msg.get("content", "")
+                if role == "system":
+                    content_parts.append(f"System: {text}")
+                else:
+                    content_parts.append(f"User: {text}")
+            prompt = "\n".join(content_parts)
+
+        from google.genai import types
+        config_args = {}
+        if "schema" in kwargs:
+            schema_arg = kwargs.pop("schema")
+            config_args["response_mime_type"] = "application/json"
+            if schema_arg != {"type": "json_object"}:
+                config_args["response_schema"] = schema_arg
+        
+        if "temperature" in kwargs:
+            config_args["temperature"] = kwargs.pop("temperature")
+            
+        if "max_tokens" in kwargs:
+            config_args["max_output_tokens"] = kwargs.pop("max_tokens")
+
+        config = types.GenerateContentConfig(**config_args) if config_args else None
+
+        import time
+        import sys
+        for attempt in range(4):
+            try:
+                response = self.client.models.generate_content(
+                    contents=prompt,
+                    config=config,
+                    **kwargs
+                )
+                return response.text
+            except Exception as e:
+                err_str = str(e)
+                if ("429" in err_str or "RESOURCE_EXHAUSTED" in err_str or "quota" in err_str.lower() or "503" in err_str or "500" in err_str or "internal error" in err_str.lower()) and attempt < 3:
+                    print(f"\n[GeminiProvider API Rate Limit/Error Hit]: {err_str[:150]}. Sleeping 75s before retry (attempt {attempt+1}/4)...")
+                    sys.stdout.flush()
+                    time.sleep(75)
+                else:
+                    raise e
+
+    def list_models(self) -> list[ModelInfo]:
+        """List available Gemini models."""
+        return [
+            ModelInfo(name="gemma-4-31b-it", provider="gemini", description="31B instruction tuned"),
+            ModelInfo(name="gemma-4-26b-a4b-it", provider="gemini", description="26B a4b instruction tuned"),
+            ModelInfo(name="gemini-3-pro-preview", provider="gemini", description="Gemini 3 Pro preview"),
+            ModelInfo(name="gemini-3-flash-preview", provider="gemini", description="Gemini 3 Flash preview"),
+            ModelInfo(name="gemini-2.5-pro", provider="gemini", description="Gemini 2.5 Pro"),
+            ModelInfo(name="gemini-2.5-flash", provider="gemini", description="Gemini 2.5 Flash"),
+            ModelInfo(name="gemini-2.0-flash", provider="gemini", description="Gemini 2.0 Flash"),
+        ]
+
+
 class ModelProviderFactory:
     """Factory for creating model providers."""
 
@@ -202,6 +327,8 @@ class ModelProviderFactory:
         "ollama": OllamaProvider,
         "openai": OpenAIProvider,
         "anthropic": AnthropicProvider,
+        "deepseek": DeepSeekProvider,
+        "gemini": GeminiProvider,
     }
 
     @classmethod
@@ -242,12 +369,17 @@ class ModelManager:
 
     def __init__(
         self,
-        default_provider: str = "ollama",
-        default_model: str = "gemma4:latest",
+        default_provider: str | None = None,
+        default_model: str | None = None,
         base_url: str | None = None,
     ):
-        self.current_provider = default_provider
-        self.current_model = default_model
+        # 加载 .env 文件
+        from dotenv import load_dotenv
+        load_dotenv()
+
+        # 从环境变量读取默认值
+        self.current_provider = default_provider or os.getenv("ACTIVE_PROVIDER", "ollama")
+        self.current_model = default_model or os.getenv("MODEL_NAME", "gemma4:latest")
         self.base_url = base_url
         self._provider: BaseModelProvider | None = None
         self._init_provider()
@@ -265,6 +397,14 @@ class ModelManager:
             },
             "openai": {"model": os.getenv("OPENAI_MODEL", "gpt-4o-mini")},
             "anthropic": {"model": os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-20250514")},
+            "deepseek": {
+                "model": os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
+                "api_key": os.getenv("DEEPSEEK_API_KEY", ""),
+            },
+            "gemini": {
+                "model": os.getenv("GEMINI_MODEL", "gemma-4-31b-it"),
+                "api_key": os.getenv("GEMINI_API_KEY", ""),
+            },
         }
 
         kwargs = provider_config.get(self.current_provider, {})
@@ -292,6 +432,8 @@ class ModelManager:
                     "ollama": "gemma4:latest",
                     "openai": "gpt-4o-mini",
                     "anthropic": "claude-sonnet-4-20250514",
+                    "deepseek": "deepseek-chat",
+                    "gemini": "gemma-4-31b-it",
                 }
                 self.current_model = defaults.get(self.current_provider, "gemma4:latest")
 
@@ -375,6 +517,17 @@ class ModelManager:
                     model=self._provider.model,
                     max_tokens=1,
                     messages=[{"role": "user", "content": "hi"}]
+                )
+                return True
+            elif isinstance(self._provider, DeepSeekProvider):
+                # DeepSeek: try a simple models list
+                self._provider.client.models.list()
+                return True
+            elif isinstance(self._provider, GeminiProvider):
+                # Gemini: try a simple generate_content call
+                self._provider.client.models.generate_content(
+                    model=self._provider.model,
+                    contents="Hello",
                 )
                 return True
             return False

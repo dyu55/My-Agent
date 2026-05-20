@@ -1,1 +1,11 @@
-python
+fastapi
+uvicorn[standard]
+sqlalchemy
+asyncpg
+redis
+pyjwt
+pytest
+httpx
+pydantic
+python-multipart
+python-dotenv

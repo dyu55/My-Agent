@@ -16,6 +16,7 @@ from .tools.file_tools import FileTools, get_file_tool_handlers
 from .tools.exec_tools import ExecTools, get_exec_tool_handlers
 from .tools.search_tools import SearchTools, get_search_tool_handlers
 from .tools.git_tools import GitTools, get_git_tool_handlers
+from .tools.base import ToolResult
 
 logger = logging.getLogger(__name__)
 
