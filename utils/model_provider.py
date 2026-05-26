@@ -329,6 +329,7 @@ class ModelProviderFactory:
         "anthropic": AnthropicProvider,
         "deepseek": DeepSeekProvider,
         "gemini": GeminiProvider,
+        "mimo": OpenAIProvider,  # MiMo is OpenAI-compatible
     }
 
     @classmethod
@@ -392,7 +393,11 @@ class ModelManager:
         provider_config = {
             "ollama": {
                 "model": self.current_model,
-                "base_url": self.base_url or os.getenv("OLLAMA_HOST", "http://localhost:11434"),
+                "base_url": self.base_url or (
+                    os.getenv("OLLAMA_CLOUD_HOST")
+                    if ollama_api_key
+                    else os.getenv("OLLAMA_HOST", "http://localhost:11434")
+                ),
                 "api_key": ollama_api_key,
             },
             "openai": {"model": os.getenv("OPENAI_MODEL", "gpt-4o-mini")},
@@ -404,6 +409,11 @@ class ModelManager:
             "gemini": {
                 "model": os.getenv("GEMINI_MODEL", "gemma-4-31b-it"),
                 "api_key": os.getenv("GEMINI_API_KEY", ""),
+            },
+            "mimo": {
+                "model": os.getenv("MIMO_MODEL", "mimo-v2.5-pro"),
+                "api_key": os.getenv("MIMO_API_KEY", ""),
+                "base_url": os.getenv("MIMO_BASE_URL", "https://token-plan-sgp.xiaomimimo.com/v1"),
             },
         }
 
@@ -434,6 +444,7 @@ class ModelManager:
                     "anthropic": "claude-sonnet-4-20250514",
                     "deepseek": "deepseek-chat",
                     "gemini": "gemma-4-31b-it",
+                    "mimo": "mimo-v2.5-pro",
                 }
                 self.current_model = defaults.get(self.current_provider, "gemma4:latest")
 
