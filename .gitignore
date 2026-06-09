@@ -8,6 +8,7 @@ __pycache__/
 *.pyo
 .agent_checkpoint.json
 .agent_trajectory.json
+.agent_backups/
 
 # Claude Code local
 .claude/
@@ -15,6 +16,7 @@ __pycache__/
 # Local scratch and test artifacts
 scratch/
 _test_bench/
+_test_debug*/
 _benchmark_workspaces/
 test.db
 *.db
@@ -48,17 +50,26 @@ tests/model_comparison_*.html
 tests/model_*.md
 tests/test_*.md
 
-# Benchmark outputs
+# Benchmark outputs and logs
 benchmark_*.json
+benchmark_*.log
+agent_eval_*.log
+agent_eval_results.json
 
-# Workspace test artifacts
-workspace/workspace/
-workspace/tests/
-workspace/comprehensive_test/
-workspace/deploy_test/
-workspace/executor_test/
-workspace/file_ops/
-workspace/git_test/
+# Root-level test/benchmark scripts (not part of core)
+test_fullstack.py
+test_models.py
+test_models_hard.py
+test_models_ollama.py
+benchmark_agent.py
+benchmark_deepseek_vs_mimo.py
+
+# Test project artifacts
+bug_test_project/
+
+# Workspace (generated code, not core)
+workspace/
+workspace_*/
 
 # Workspace temp files
 workspace/__pycache__/
