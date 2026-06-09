@@ -1,5 +1,7 @@
 """MyAgent - Coding Agent with local 8B/9B models."""
 
+__version__ = "0.2.0"
+
 from .engine import AgentEngine, create_agent_from_env
 from .planner import TaskPlanner
 from .executor import ToolExecutor

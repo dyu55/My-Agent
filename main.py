@@ -37,12 +37,17 @@ def parse_args() -> argparse.Namespace:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-    python main.py "创建一个 TODO 应用"
-    python main.py --chat                    # 交互式对话
+    python main.py "Create a TODO app"
+    python main.py --chat                    # Interactive CLI
     python main.py --chat --model qwen2.5:9b
     python main.py --model qwen2.5:9b "实现用户认证功能"
-    python main.py --provider openai "重构代码并添加测试"
+    python main.py --provider openai "Refactor code and add tests"
         """,
+    )
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"MyAgent %(prog)s",
     )
     parser.add_argument(
         "task",
