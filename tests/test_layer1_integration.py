@@ -1,9 +1,9 @@
 """Test Layer 1 Integration: StateManager + EmbeddingStore
 
-测试 StateManager 与 EmbeddingStore 的集成：
-- capture_session_metadata 自动捕获
-- search_memories 搜索功能
-- auto_capture_on_task_complete 钩子
+Tests StateManager and EmbeddingStore integration:
+- capture_session_metadata auto-capture
+- search_memories search functionality
+- auto_capture_on_task_complete hooks
 """
 
 import json
@@ -13,7 +13,14 @@ from pathlib import Path
 import pytest
 
 from memory.state_manager import StateManager
-from memory.embedding_store import EmbeddingStore
+
+try:
+    from memory.embedding_store import EmbeddingStore
+    HAS_CHROMADB = True
+except ImportError:
+    HAS_CHROMADB = False
+
+pytestmark = pytest.mark.skipif(not HAS_CHROMADB, reason="chromadb not installed")
 
 
 class TestStateManagerEmbeddingIntegration:

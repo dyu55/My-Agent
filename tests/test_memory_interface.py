@@ -1,10 +1,10 @@
 """Test Memory Interface and Mock Embeddings (Layer 1 MVP)
 
-测试 Layer 1 的核心功能：
-- EmbeddingStore 接口
-- 模拟嵌入生成
-- 文本回退搜索
-- 记忆存取
+Tests Layer 1 core functionality:
+- EmbeddingStore interface
+- Mock embedding generation
+- Text fallback search
+- Memory storage/retrieval
 """
 
 import json
@@ -13,7 +13,13 @@ from pathlib import Path
 
 import pytest
 
-from memory.embedding_store import EmbeddingStore, MemoryEntry
+try:
+    from memory.embedding_store import EmbeddingStore, MemoryEntry
+    HAS_CHROMADB = True
+except ImportError:
+    HAS_CHROMADB = False
+
+pytestmark = pytest.mark.skipif(not HAS_CHROMADB, reason="chromadb not installed")
 
 
 class TestMemoryEntry:
