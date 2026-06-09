@@ -6,10 +6,15 @@ from utils.model_provider import (
     ModelManager,
     OllamaProvider,
     OpenAIProvider,
-    AnthropicProvider,
     DeepSeekProvider,
     BaseModelProvider,
 )
+
+try:
+    from utils.model_provider import AnthropicProvider
+    HAS_ANTHROPIC = True
+except ImportError:
+    HAS_ANTHROPIC = False
 
 
 class TestBaseProviderStream:
@@ -88,6 +93,7 @@ class TestOpenAIProviderStream:
         assert chunks == ["Hello", " World"]
 
 
+@pytest.mark.skipif(not HAS_ANTHROPIC, reason="anthropic not installed")
 class TestAnthropicProviderStream:
     """Test AnthropicProvider.chat_stream."""
 
