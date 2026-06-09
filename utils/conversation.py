@@ -1,5 +1,6 @@
 """Conversation memory management for context compression."""
 
+import re
 from typing import Any
 
 
@@ -9,7 +10,7 @@ class ConversationMemory:
 
     Implements a compression strategy to maintain context within token limits:
     - Keeps recent turns as-is
-    - Compresses older turns into summary lines
+    - Compresses older turns into structured summary lines
     """
 
     def __init__(self, max_pairs: int = 4):
@@ -39,11 +40,40 @@ class ConversationMemory:
         max_turns = self.max_pairs * 2
         while len(self.recent_turns) > max_turns:
             oldest = self.recent_turns.pop(0)
-            # Create compact summary of the turn
-            compact = oldest["content"].replace("\n", " ").strip()[:180]
-            self.summary_lines.append(f"- {oldest['role']}: {compact}")
+            compact = self._summarize_turn(oldest["role"], oldest["content"])
+            self.summary_lines.append(compact)
             # Keep summary lines limited
             self.summary_lines = self.summary_lines[-12:]
+
+    @staticmethod
+    def _summarize_turn(role: str, content: str) -> str:
+        """Create a structured summary of a conversation turn."""
+        content = content.strip()
+
+        if role == "assistant":
+            # Extract action info from assistant messages
+            cmd_match = re.search(r'"command"\s*:\s*"(\w+)"', content)
+            path_match = re.search(r'"path"\s*:\s*"([^"]+)"', content)
+            cmd = cmd_match.group(1) if cmd_match else ""
+            path = path_match.group(1) if path_match else ""
+            if cmd and path:
+                return f"- assistant: {cmd} -> {path}"
+            elif cmd:
+                return f"- assistant: {cmd}"
+            # Fallback: keep first 120 chars
+            return f"- assistant: {content[:120]}"
+
+        if role == "user":
+            # Extract result status from user messages
+            if "Success" in content or "success" in content:
+                return "- user: [success]"
+            elif "Error" in content or "error" in content:
+                error_match = re.search(r"(Error[:\s].{0,80})", content)
+                error = error_match.group(1) if error_match else "error"
+                return f"- user: {error}"
+            return f"- user: {content[:120]}"
+
+        return f"- {role}: {content[:120]}"
 
     def build_messages(
         self,
