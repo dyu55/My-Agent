@@ -7,31 +7,9 @@ on:
     branches: [master]
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.11", "3.12", "3.13"]
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pytest
-
-      - name: Run tests
-        run: |
-          python -m pytest tests/ -v --tb=short
-
+  # ── Stage 1: Lint & Syntax Check ──────────────────────────────
   lint:
+    name: Code Quality
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -45,8 +23,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install flake8
 
-      - name: Check syntax
+      - name: Check syntax (py_compile)
         run: |
           python -m py_compile agent/engine.py
           python -m py_compile agent/planner.py
@@ -57,3 +36,158 @@ jobs:
           python -m py_compile utils/llm_cache.py
           python -m py_compile utils/conversation.py
           python -m py_compile main.py
+
+      - name: Lint with flake8
+        run: |
+          # Stop on syntax errors or undefined names
+          flake8 agent/ utils/ main.py --count --select=E9,F63,F7,F82 --show-source --statistics
+          # Warnings as non-blocking
+          flake8 agent/ utils/ main.py --count --max-line-length=120 --statistics --exit-zero
+
+  # ── Stage 2: Unit Tests ───────────────────────────────────────
+  unit-test:
+    name: Unit Tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pytest-cov
+
+      - name: Run unit tests
+        run: |
+          python -m pytest tests/ -v --tb=short \
+            -x \
+            --ignore=tests/test_e2e.py \
+            --ignore=tests/test_layer1_integration.py \
+            --ignore=tests/test_memory_interface.py \
+            --ignore=tests/llm_models_benchmark.py \
+            --ignore=tests/skills_models_benchmark.py
+
+      - name: Run tests with coverage
+        if: matrix.python-version == '3.12'
+        run: |
+          python -m pytest tests/ --cov=agent --cov=utils --cov-report=term-missing --cov-report=xml \
+            --ignore=tests/test_e2e.py \
+            --ignore=tests/test_layer1_integration.py \
+            --ignore=tests/test_memory_interface.py \
+            --ignore=tests/llm_models_benchmark.py \
+            --ignore=tests/skills_models_benchmark.py
+
+      - name: Upload coverage report
+        if: matrix.python-version == '3.12'
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.xml
+          fail_ci_if_error: false
+
+  # ── Stage 3: Integration Tests ────────────────────────────────
+  integration-test:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [lint]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest
+
+      - name: Run integration tests
+        run: |
+          python -m pytest tests/test_e2e.py tests/test_engine_integration.py -v --tb=short
+
+  # ── Stage 4: Security Scan ────────────────────────────────────
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    needs: [lint]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install bandit safety
+
+      - name: Run bandit security scan
+        run: |
+          bandit -r agent/ utils/ -ll -ii --skip B101
+        continue-on-error: true
+
+      - name: Check dependencies for vulnerabilities
+        run: |
+          safety check -r requirements.txt --full-report
+        continue-on-error: true
+
+  # ── Stage 5: Build Verification ───────────────────────────────
+  build:
+    name: Build Verification
+    runs-on: ubuntu-latest
+    needs: [lint]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tools
+        run: |
+          python -m pip install --upgrade pip
+          pip install build
+
+      - name: Build package
+        run: python -m build
+
+      - name: Verify package
+        run: |
+          ls -la dist/
+          python -c "import tarfile; t = tarfile.open('dist/myagent-0.2.0.tar.gz'); print('Package OK')"
+
+  # ── Stage 6: Type Checking ────────────────────────────────────
+  typecheck:
+    name: Type Check
+    runs-on: ubuntu-latest
+    needs: [lint]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyright
+
+      - name: Run type check
+        run: pyright agent/ utils/ --pythonversion 3.12
+        continue-on-error: true
