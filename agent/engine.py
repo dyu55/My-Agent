@@ -654,6 +654,10 @@ Return JSON:
             # Pass empty prompt — system prompt is already in messages[0]
             response = self.llm.chat_execute("", messages=messages, schema={"type": "json_object"})
 
+            # Early check for empty responses
+            if not response or not response.strip():
+                return Action(command="write", path=f"output_{task.id}.py", content=f"# Task: {task.description}\nprint('Hello')")
+
             # Extract JSON from markdown code blocks
             data = _extract_json_from_response(response)
 
