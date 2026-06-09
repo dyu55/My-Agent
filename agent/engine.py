@@ -662,6 +662,11 @@ Return JSON:
             data = _extract_json_from_response(response)
 
             if data is None:
+                # Try to extract code from non-JSON response
+                code_match = re.search(r"```(?:python)?\s*([\s\S]*?)```", response)
+                if code_match:
+                    code = code_match.group(1).strip()
+                    return Action(command="write", path=f"output_{task.id}.py", content=code)
                 # Include raw response snippet for debugging
                 snippet = response[:200].replace("\n", " ") if response else "empty"
                 return Action(command="debug", content=f"Unable to parse task: {task.description}. Raw response: {snippet}")
