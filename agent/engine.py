@@ -658,7 +658,9 @@ Return JSON:
             data = _extract_json_from_response(response)
 
             if data is None:
-                return Action(command="debug", content=f"Unable to parse task: {task.description}")
+                # Include raw response snippet for debugging
+                snippet = response[:200].replace("\n", " ") if response else "empty"
+                return Action(command="debug", content=f"Unable to parse task: {task.description}. Raw response: {snippet}")
 
             # Normalize action data (handle "action" vs "command", nested "args", etc.)
             data = _normalize_action_data(data)
