@@ -332,7 +332,13 @@ class ToolExecutor:
 
             Path(target).parent.mkdir(parents=True, exist_ok=True)
             Path(target).write_text(action.content, encoding="utf-8")
-            return f"Success: File {action.path} written"
+
+            # Verify file was actually written
+            if not Path(target).exists():
+                return f"Error: File {action.path} write appeared to succeed but file does not exist"
+
+            size = Path(target).stat().st_size
+            return f"Success: File {action.path} written ({size} bytes)"
         except Exception as e:
             return f"Error writing file: {str(e)}"
 
