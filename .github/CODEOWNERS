@@ -1,0 +1,15 @@
+# Default owners for everything in the repo
+* @dyu55
+
+# Agent core
+agent/ @dyu55
+utils/ @dyu55
+
+# CLI
+cli/ @dyu55
+
+# Tests
+tests/ @dyu55
+
+# CI/CD
+.github/ @dyu55
