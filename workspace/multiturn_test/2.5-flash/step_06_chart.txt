@@ -1,0 +1,893 @@
+太棒了！数据可视化是财务管理中非常实用的一环，能让你一目了然地看到支出的结构。我们来实现一个 **本月支出类别的饼图**，让你直观了解钱都花到哪儿了。
+
+为了实现图表功能，我们将引入一个轻量级的 JavaScript 图表库叫做 **Chart.js**。它非常流行且易于使用，可以帮助我们快速生成漂亮的图表。
+
+### **实现步骤：**
+
+1.  **引入 Chart.js 库：** 在 HTML 文件的 `<head>` 或 `<body>` 底部添加一个 `<script>` 标签，从 CDN（内容分发网络）加载 Chart.js。
+2.  **修改 HTML 结构：** 添加一个 `<canvas>` 元素，这是 Chart.js 绘制图表的“画板”。
+3.  **修改 JavaScript 逻辑：**
+    *   新增一个函数来处理当前月份的支出数据，按类别进行汇总。
+    *   使用 Chart.js 创建并更新饼图。
+
+---
+
+### **第一步：更新 HTML 结构**
+
+请用下面的完整 HTML 代码替换你现有的 `index.html` 的全部内容。
+
+主要变化是：
+*   在 `<head>` 中引入了 Chart.js 库。
+*   在 `monthly-summary` 部分下方（或者你可以决定放在其他位置，但我认为这里与月度概览最相关），增加了一个新的 `summary-card` 用于放置饼图。
+
+```html
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的家庭财务管家</title>
+    <!-- 引入Google Fonts - Noto Sans SC (思源黑体), 用于更好的中文字体显示 -->
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <!-- 引入 Chart.js 库 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        /* CSS 样式将在这里定义 */
+        :root {
+            /* 定义CSS变量，方便统一修改颜色 */
+            --bg-light: #fefcfb; /* 主背景色 */
+            --bg-medium: #fff8f5; /* 次要背景色，例如卡片背景 */
+            --text-dark: #3a3a3a; /* 主要文字颜色 */
+            --text-medium: #6a6a6a; /* 次要文字颜色 */
+            --primary-color: #795548; /* 主色调 - 暖棕色 */
+            --primary-light: #a1887f; /* 浅主色调 */
+            --accent-green: #4CAF50; /* 收入绿色 */
+            --accent-red: #D32F2F; /* 支出红色 */
+            --border-light: #e0e0e0; /* 浅边框色 */
+            --shadow-light: rgba(0, 0, 0, 0.08); /* 浅阴影 */
+            --shadow-medium: rgba(0, 0, 0, 0.12); /* 中等阴影 */
+        }
+
+        body {
+            font-family: 'Noto Sans SC', Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: var(--bg-light);
+            color: var(--text-dark);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 960px; /* 增加最大宽度 */
+            margin: 0 auto;
+            background-color: var(--bg-medium);
+            padding: 25px 30px;
+            border-radius: 12px;
+            box-shadow: 0 6px 15px var(--shadow-medium);
+        }
+
+        h1 {
+            color: var(--primary-color);
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.2em;
+            font-weight: 700;
+        }
+
+        h2 {
+            color: var(--primary-light);
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 1.6em;
+            font-weight: 500;
+            border-bottom: 1px solid var(--border-light);
+            padding-bottom: 10px;
+        }
+
+        /* 摘要卡片基础样式 */
+        .summary-card {
+            background-color: #ffffff;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 25px;
+            box-shadow: 0 3px 8px var(--shadow-light);
+            text-align: center;
+        }
+        .summary-card h2 {
+            border-bottom: none; /* 卡片内h2不带下划线 */
+            margin-top: 0;
+            padding-bottom: 0;
+            font-size: 1.4em;
+            color: var(--text-dark);
+        }
+
+        .balance-summary .balance-value {
+            font-size: 2.5em;
+            font-weight: 700;
+            color: var(--primary-color);
+            display: block;
+            margin-top: 10px;
+        }
+
+        .monthly-stats div {
+            margin-bottom: 8px;
+            font-size: 1.1em;
+            color: var(--text-medium);
+        }
+        .monthly-stats strong {
+            color: var(--primary-color);
+            font-weight: 500;
+        }
+        .monthly-stats .income { color: var(--accent-green); }
+        .monthly-stats .expense { color: var(--accent-red); }
+
+        .budget-alert {
+            margin-top: 15px;
+            padding: 12px;
+            border-radius: 8px;
+            font-weight: 500;
+            font-size: 1.2em;
+            text-align: center;
+            line-height: 1.4;
+        }
+        .budget-alert.over {
+            background-color: #fff0f0; /* 浅红背景 */
+            color: var(--accent-red); /* 红色字体 */
+            border: 1px solid #ffcccc;
+        }
+        .budget-alert.within {
+            background-color: #f0fff0; /* 浅绿背景 */
+            color: var(--accent-green); /* 绿色字体 */
+            border: 1px solid #ccffcc;
+        }
+
+        /* 左右分栏布局 */
+        .main-content {
+            display: flex;
+            gap: 25px; /* 间距 */
+            flex-wrap: wrap; /* 允许换行，用于手机端 */
+            margin-top: 30px;
+        }
+        .main-content .left-panel,
+        .main-content .right-panel {
+            flex: 1; /* 均分空间 */
+            min-width: 300px; /* 最小宽度，防止过窄 */
+            background-color: #ffffff;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 3px 8px var(--shadow-light);
+        }
+        .main-content .left-panel { flex: 0 0 35%; /* 左侧固定窄一些 */ }
+        .main-content .right-panel { flex: 1; /* 右侧占据剩余空间 */ }
+
+
+        .form-group {
+            margin-bottom: 18px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: var(--text-dark);
+        }
+        .form-group input[type="number"],
+        .form-group input[type="date"],
+        .form-group select,
+        .form-group textarea {
+            width: calc(100% - 20px); /* 减去padding */
+            padding: 10px;
+            border: 1px solid var(--border-light);
+            border-radius: 6px;
+            box-sizing: border-box;
+            font-family: 'Noto Sans SC', Arial, sans-serif; /* 确保输入框字体一致 */
+            font-size: 1em;
+            transition: border-color 0.3s ease;
+        }
+        .form-group input[type="number"]:focus,
+        .form-group input[type="date"]:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            border-color: var(--primary-light);
+            outline: none;
+        }
+        
+        /* 单选按钮样式 */
+        .radio-group {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+        .radio-group label {
+            display: inline-flex;
+            align-items: center;
+            cursor: pointer;
+            font-weight: normal;
+            color: var(--text-dark);
+        }
+        .radio-group input[type="radio"] {
+            -webkit-appearance: none; /* 隐藏原生radio */
+            -moz-appearance: none;
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border: 2px solid var(--primary-light);
+            border-radius: 50%;
+            margin-right: 8px;
+            position: relative;
+            cursor: pointer;
+            outline: none;
+            transition: border-color 0.2s ease;
+        }
+        .radio-group input[type="radio"]:checked {
+            border-color: var(--primary-color);
+        }
+        .radio-group input[type="radio"]:checked::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: var(--primary-color);
+            transform: translate(-50%, -50%);
+        }
+        .radio-group input[type="radio"]:focus {
+            box-shadow: 0 0 0 2px rgba(121, 85, 72, 0.2);
+        }
+
+        button[type="submit"] {
+            background-color: var(--primary-color);
+            color: white;
+            padding: 12px 15px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 1.1em;
+            width: 100%;
+            transition: background-color 0.3s ease, transform 0.1s ease;
+            font-family: 'Noto Sans SC', Arial, sans-serif;
+            font-weight: 500;
+        }
+        button[type="submit"]:hover {
+            background-color: var(--primary-light);
+            transform: translateY(-2px);
+        }
+        button[type="submit"]:active {
+            transform: translateY(0);
+        }
+
+        table {
+            width: 100%;
+            border-collapse: separate; /* 用于圆角边框 */
+            border-spacing: 0; /* 消除单元格间距 */
+            margin-top: 20px;
+            border-radius: 8px; /* 表格整体圆角 */
+            overflow: hidden; /* 隐藏超出圆角的部分 */
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+        th, td {
+            border: 1px solid var(--border-light);
+            padding: 12px 15px;
+            text-align: left;
+        }
+        th {
+            background-color: #f5f5f5;
+            font-weight: 500;
+            color: var(--text-medium);
+            position: sticky; /* 表头固定 */
+            top: 0;
+            z-index: 10;
+        }
+        tbody tr:nth-child(even) {
+            background-color: #f9f9f9; /* 条纹表格 */
+        }
+        tbody tr:hover {
+            background-color: #f0f0f0;
+        }
+        td.income-text { color: var(--accent-green); font-weight: 500; }
+        td.expense-text { color: var(--accent-red); font-weight: 500; }
+
+        .delete-btn {
+            background-color: #ff7f7f;
+            color: white;
+            padding: 6px 10px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: background-color 0.2s ease;
+        }
+        .delete-btn:hover {
+            background-color: var(--accent-red);
+        }
+
+        /* 图表容器样式 */
+        .chart-container {
+            width: 100%;
+            max-width: 400px; /* 控制图表最大宽度 */
+            margin: 20px auto 0; /* 居中显示 */
+            position: relative;
+        }
+        #expenseChart {
+            max-height: 350px; /* 控制图表高度 */
+        }
+        .no-data-message {
+            text-align: center;
+            color: var(--text-medium);
+            padding: 20px 0;
+            font-size: 1.1em;
+        }
+
+        /* 手机等小屏幕设备的响应式调整 */
+        @media (max-width: 768px) {
+            body {
+                padding: 15px;
+            }
+            .container {
+                padding: 20px;
+            }
+            h1 {
+                font-size: 1.8em;
+            }
+            h2 {
+                font-size: 1.4em;
+            }
+            .main-content {
+                flex-direction: column; /* 小屏幕下垂直堆叠 */
+                gap: 20px;
+            }
+            .main-content .left-panel,
+            .main-content .right-panel {
+                min-width: unset; /* 取消最小宽度限制 */
+                flex: 1 1 100%; /* 各自占据100%宽度 */
+            }
+            .balance-summary .balance-value {
+                font-size: 2em;
+            }
+            .monthly-stats strong {
+                display: block; /* 手机上金额独占一行 */
+                margin-top: 5px;
+            }
+            .budget-alert {
+                font-size: 1.1em;
+                padding: 10px;
+            }
+            .form-group input[type="number"],
+            .form-group input[type="date"],
+            .form-group select,
+            .form-group textarea {
+                width: calc(100% - 16px); /* 调整padding后宽度 */
+                padding: 8px;
+            }
+            th, td {
+                padding: 10px 12px;
+                font-size: 0.9em;
+            }
+            /* 隐藏一些列以节省空间 */
+            .transaction-list table thead th:nth-child(5), /* 备注 */
+            .transaction-list table tbody td:nth-child(5) {
+                display: none;
+            }
+            .transaction-list table thead th:nth-child(3), /* 类别 */
+            .transaction-list table tbody td:nth-child(3) {
+                 display: none; /* 手机上先隐藏类别，保留类型、金额、日期、操作 */
+            }
+            .chart-container {
+                max-width: 100%; /* 手机上图表可以更宽 */
+            }
+        }
+
+        @media (max-width: 480px) {
+            /* 更小的手机屏幕 */
+            .transaction-list table thead th:nth-child(4), /* 日期 */
+            .transaction-list table tbody td:nth-child(4) {
+                 display: none; /* 再隐藏日期，只保留类型、金额、操作 */
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>我的家庭财务管家</h1>
+
+        <div class="summary-card balance-summary">
+            <h2>总余额</h2>
+            <span id="current-balance" class="balance-value">0.00</span> 元
+        </div>
+
+        <section class="summary-card monthly-summary">
+            <h2>本月概览</h2>
+            <div class="monthly-stats">
+                <div>本月收入: <strong id="monthly-income" class="income">0.00</strong> 元</div>
+                <div>本月支出: <strong id="monthly-expense" class="expense">0.00</strong> 元</div>
+                <div>本月结余: <strong id="monthly-balance">0.00</strong> 元</div>
+            </div>
+            <div class="budget-alert" id="budget-alert">
+                <!-- 预算提醒将在这里显示 -->
+            </div>
+        </section>
+
+        <!-- 新增的饼图区域 -->
+        <section class="summary-card expense-chart-card">
+            <h2>本月支出类别分析</h2>
+            <div class="chart-container">
+                <canvas id="expenseChart"></canvas>
+                <p id="no-chart-data" class="no-data-message" style="display: none;">本月暂无支出数据。</p>
+            </div>
+        </section>
+
+        <div class="main-content">
+            <section class="left-panel add-transaction">
+                <h2>添加新记录</h2>
+                <form id="transaction-form">
+                    <div class="form-group radio-group">
+                        <input type="radio" id="type-income" name="transaction-type" value="income" checked>
+                        <label for="type-income">收入</label>
+                        <input type="radio" id="type-expense" name="transaction-type" value="expense">
+                        <label for="type-expense">支出</label>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="amount">金额:</label>
+                        <input type="number" id="amount" step="0.01" min="0.01" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="category">类别:</label>
+                        <select id="category" required>
+                            <!-- 收入类别 -->
+                            <optgroup label="收入">
+                                <option value="工资">工资</option>
+                                <option value="兼职">兼职</option>
+                                <option value="投资">投资</option>
+                                <option value="礼金">礼金</option>
+                                <option value="其他收入">其他收入</option>
+                            </optgroup>
+                            <!-- 支出类别 -->
+                            <optgroup label="支出">
+                                <option value="餐饮">餐饮</option>
+                                <option value="交通">交通</option>
+                                <option value="购物">购物</option>
+                                <option value="娱乐">娱乐</option>
+                                <option value="学习">学习</option>
+                                <option value="住房">住房</option>
+                                <option value="医疗">医疗</option>
+                                <option value="其他支出">其他支出</option>
+                            </optgroup>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="date">日期:</label>
+                        <input type="date" id="date" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="description">备注 (可选):</label>
+                        <textarea id="description" rows="3"></textarea>
+                    </div>
+
+                    <button type="submit">添加记录</button>
+                </form>
+            </section>
+
+            <section class="right-panel transaction-list">
+                <h2>历史交易</h2>
+                <div style="overflow-x: auto;">
+                    <table id="transactions-table">
+                        <thead>
+                            <tr>
+                                <th>类型</th>
+                                <th>金额</th>
+                                <th>类别</th>
+                                <th>日期</th>
+                                <th>备注</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="transactions-body">
+                            <!-- 交易记录将在这里动态加载 -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+
+    </div>
+
+    <script>
+        // JavaScript 代码将在这里补充
+    </script>
+</body>
+</html>
+```
+
+---
+
+### **第二步：更新 JavaScript 逻辑**
+
+现在，我们来填充 `script` 标签内的 JavaScript 代码。这段代码将包含 Chart.js 的初始化和数据更新逻辑。
+
+请用以下代码替换你 `index.html` 文件中所有的 `<script>` 标签内容：
+
+```javascript
+<script>
+    // 全局变量，用于存储所有交易记录
+    let transactions = [];
+    // 每月预算，你可以修改这个值
+    const MONTHLY_BUDGET = 5000; 
+
+    // 获取DOM元素
+    const balanceDisplay = document.getElementById('current-balance');
+    const transactionForm = document.getElementById('transaction-form');
+    const transactionsBody = document.getElementById('transactions-body');
+    const dateInput = document.getElementById('date');
+
+    // 月度统计元素
+    const monthlyIncomeDisplay = document.getElementById('monthly-income');
+    const monthlyExpenseDisplay = document.getElementById('monthly-expense');
+    const monthlyBalanceDisplay = document.getElementById('monthly-balance');
+    const budgetAlert = document.getElementById('budget-alert');
+
+    // 图表元素
+    const expenseChartCanvas = document.getElementById('expenseChart');
+    const noChartDataMessage = document.getElementById('no-chart-data');
+    let expenseChartInstance; // 用于存储 Chart.js 实例
+
+    // Chart.js 默认颜色数组 (你可以根据需要调整)
+    const chartColors = [
+        '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9933', '#C9CBCF', '#E7E9ED',
+        '#FF80CC', '#80FFB3', '#8099FF', '#CCFF80', '#FFCC80', '#B380FF', '#EBEB80', '#A0A0A0'
+    ];
+
+
+    // --- 辅助函数 ---
+
+    // 格式化金额，保留两位小数
+    function formatAmount(amount) {
+        return parseFloat(amount).toFixed(2);
+    }
+
+    // 获取当前月份的字符串，格式为 YYYY-MM
+    function getCurrentMonthString() {
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0'); // getMonth() 返回 0-11
+        return `${year}-${month}`;
+    }
+
+    // --- 数据操作与存储 ---
+
+    // 从 localStorage 加载交易记录
+    function loadTransactions() {
+        const storedTransactions = localStorage.getItem('transactions');
+        if (storedTransactions) {
+            transactions = JSON.parse(storedTransactions);
+        } else {
+            transactions = []; // 如果没有数据，初始化为空数组
+        }
+    }
+
+    // 保存交易记录到 localStorage
+    function saveTransactions() {
+        localStorage.setItem('transactions', JSON.stringify(transactions));
+    }
+
+    // --- 核心功能函数 ---
+
+    // 计算并显示总余额
+    function updateBalance() {
+        let totalBalance = 0;
+        transactions.forEach(transaction => {
+            if (transaction.type === 'income') {
+                totalBalance += transaction.amount;
+            } else {
+                totalBalance -= transaction.amount;
+            }
+        });
+        balanceDisplay.textContent = formatAmount(totalBalance);
+    }
+
+    // 渲染交易列表
+    function renderTransactions() {
+        transactionsBody.innerHTML = ''; // 清空现有列表
+        transactions.forEach((transaction, index) => {
+            const row = transactionsBody.insertRow();
+            const typeCell = row.insertCell(0);
+            const amountCell = row.insertCell(1);
+            const categoryCell = row.insertCell(2);
+            const dateCell = row.insertCell(3);
+            const descriptionCell = row.insertCell(4);
+            const actionCell = row.insertCell(5);
+
+            typeCell.textContent = transaction.type === 'income' ? '收入' : '支出';
+            typeCell.classList.add(transaction.type === 'income' ? 'income-text' : 'expense-text');
+            
+            amountCell.textContent = formatAmount(transaction.amount);
+            amountCell.classList.add(transaction.type === 'income' ? 'income-text' : 'expense-text');
+
+            categoryCell.textContent = transaction.category;
+            dateCell.textContent = transaction.date;
+            descriptionCell.textContent = transaction.description;
+
+            const deleteButton = document.createElement('button');
+            deleteButton.textContent = '删除';
+            deleteButton.classList.add('delete-btn'); // 添加一个类，方便样式控制
+            deleteButton.onclick = () => deleteTransaction(index);
+            actionCell.appendChild(deleteButton);
+        });
+    }
+
+    // 删除交易记录
+    function deleteTransaction(index) {
+        if (confirm('确定要删除这笔记录吗？')) {
+            transactions.splice(index, 1); // 从数组中删除
+            saveTransactions(); // 删除后保存
+            initApp(); // 重新加载和更新所有数据
+        }
+    }
+
+    // 计算并显示月度统计
+    function updateMonthlySummary() {
+        const currentMonth = getCurrentMonthString();
+        let monthlyIncome = 0;
+        let monthlyExpense = 0;
+
+        transactions.forEach(transaction => {
+            // 检查交易日期是否属于当前月份
+            if (transaction.date.startsWith(currentMonth)) {
+                if (transaction.type === 'income') {
+                    monthlyIncome += transaction.amount;
+                } else {
+                    monthlyExpense += transaction.amount;
+                }
+            }
+        });
+
+        const monthlyBalance = monthlyIncome - monthlyExpense;
+        const remainingBudget = MONTHLY_BUDGET - monthlyExpense;
+
+        monthlyIncomeDisplay.textContent = formatAmount(monthlyIncome);
+        monthlyExpenseDisplay.textContent = formatAmount(monthlyExpense);
+        monthlyBalanceDisplay.textContent = formatAmount(monthlyBalance);
+
+        // 预算提醒
+        budgetAlert.classList.remove('over', 'within'); // 清除之前的样式
+        if (remainingBudget < 0) {
+            budgetAlert.textContent = `🚨 预算超支 ${formatAmount(Math.abs(remainingBudget))} 元！请注意。`;
+            budgetAlert.classList.add('over');
+        } else {
+            budgetAlert.textContent = `本月预算剩余 ${formatAmount(remainingBudget)} 元。`;
+            budgetAlert.classList.add('within');
+        }
+    }
+
+    // 根据选择的类型更新类别下拉框的可用选项
+    function updateCategoryOptions(type) {
+        const categorySelect = document.getElementById('category');
+        const currentSelectedValue = categorySelect.value;
+        
+        Array.from(categorySelect.children).forEach(optgroup => {
+            if (optgroup.tagName === 'OPTGROUP') {
+                if (optgroup.label === '收入' && type === 'expense') {
+                    optgroup.style.display = 'none';
+                } else if (optgroup.label === '支出' && type === 'income') {
+                    optgroup.style.display = 'none';
+                } else {
+                    optgroup.style.display = ''; // 显示对应类别
+                }
+            }
+        });
+
+        let foundCurrent = false;
+        for (let i = 0; i < categorySelect.options.length; i++) {
+            const option = categorySelect.options[i];
+            if (option.value === currentSelectedValue && option.parentNode.style.display !== 'none') {
+                foundCurrent = true;
+                break;
+            }
+        }
+        
+        if (!foundCurrent) {
+            for (let i = 0; i < categorySelect.options.length; i++) {
+                const option = categorySelect.options[i];
+                if (option.parentNode.style.display !== 'none') {
+                    categorySelect.selectedIndex = i;
+                    break;
+                }
+            }
+        }
+    }
+
+    // --- 图表相关函数 ---
+
+    function renderExpenseChart() {
+        const currentMonth = getCurrentMonthString();
+        const expenseData = {}; // 用于存储 {类别: 总金额}
+
+        transactions.forEach(transaction => {
+            if (transaction.type === 'expense' && transaction.date.startsWith(currentMonth)) {
+                const category = transaction.category;
+                expenseData[category] = (expenseData[category] || 0) + transaction.amount;
+            }
+        });
+
+        const labels = Object.keys(expenseData);
+        const data = Object.values(expenseData);
+
+        // 如果没有支出数据，隐藏图表并显示提示
+        if (labels.length === 0) {
+            expenseChartCanvas.style.display = 'none';
+            noChartDataMessage.style.display = 'block';
+            if (expenseChartInstance) {
+                expenseChartInstance.destroy(); // 销毁旧图表实例
+                expenseChartInstance = null;
+            }
+            return;
+        } else {
+            expenseChartCanvas.style.display = 'block';
+            noChartDataMessage.style.display = 'none';
+        }
+
+        // 如果图表实例已存在，更新数据
+        if (expenseChartInstance) {
+            expenseChartInstance.data.labels = labels;
+            expenseChartInstance.data.datasets[0].data = data;
+            // 确保颜色也更新，即使类别数量没变，顺序可能变了
+            expenseChartInstance.data.datasets[0].backgroundColor = labels.map((_, i) => chartColors[i % chartColors.length]);
+            expenseChartInstance.update();
+        } else {
+            // 否则，创建一个新的图表实例
+            const ctx = expenseChartCanvas.getContext('2d');
+            expenseChartInstance = new Chart(ctx, {
+                type: 'pie', // 饼图
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: data,
+                        backgroundColor: labels.map((_, i) => chartColors[i % chartColors.length]), // 循环使用颜色
+                        hoverOffset: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false, // 允许手动设置canvas尺寸，但在这里我们用CSS控制容器
+                    plugins: {
+                        legend: {
+                            position: 'right', // 图例放在右边
+                            labels: {
+                                font: {
+                                    size: 12,
+                                    family: 'Noto Sans SC',
+                                }
+                            }
+                        },
+                        title: {
+                            display: false, // 标题已经在H2中显示
+                            text: '本月支出类别分析'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    if (context.parsed !== null) {
+                                        label += formatAmount(context.parsed) + ' 元';
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+    }
+
+
+    // --- 事件监听 ---
+
+    // 表单提交处理
+    transactionForm.addEventListener('submit', (event) => {
+        event.preventDefault(); // 阻止表单默认提交行为（页面刷新）
+
+        const type = document.querySelector('input[name="transaction-type"]:checked').value;
+        const amount = parseFloat(document.getElementById('amount').value);
+        const category = document.getElementById('category').value;
+        const date = document.getElementById('date').value;
+        const description = document.getElementById('description').value.trim();
+
+        if (isNaN(amount) || amount <= 0) {
+            alert('请输入有效的金额！');
+            return;
+        }
+
+        const newTransaction = {
+            type,
+            amount,
+            category,
+            date,
+            description,
+            id: Date.now() // 为每笔交易生成一个唯一ID，方便将来操作
+        };
+
+        transactions.push(newTransaction);
+        saveTransactions(); // 添加后保存
+        transactionForm.reset(); // 清空表单
+        // 重置类型选择和类别
+        document.getElementById('type-income').checked = true;
+        updateCategoryOptions('income');
+        // 重新设置日期为今天
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        dateInput.value = `${year}-${month}-${day}`;
+
+        initApp(); // 重新加载和更新所有数据
+    });
+
+    // 监听类型（收入/支出）选择的变化
+    document.querySelectorAll('input[name="transaction-type"]').forEach(radio => {
+        radio.addEventListener('change', (event) => {
+            updateCategoryOptions(event.target.value);
+        });
+    });
+
+    // --- 初始化函数 ---
+
+    // 应用初始化
+    function initApp() {
+        loadTransactions();      // 1. 加载所有记录 (首先加载)
+        updateBalance();         // 2. 更新总余额
+        renderTransactions();    // 3. 渲染交易列表
+        updateMonthlySummary();  // 4. 更新月度统计和预算提醒
+        renderExpenseChart();    // 5. 渲染月度支出饼图
+    }
+
+    // 页面加载完成后执行
+    document.addEventListener('DOMContentLoaded', () => {
+        // 设置日期输入框的默认值为今天
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        dateInput.value = `${year}-${month}-${day}`;
+        
+        // 默认选中收入，并根据类型调整类别选择
+        document.getElementById('type-income').checked = true;
+        updateCategoryOptions('income');
+
+        initApp(); // 启动应用
+    });
+</script>
+```
+
+---
+
+### **第三步：保存并刷新页面**
+
+1.  保存你的 `index.html` 文件。
+2.  回到你的浏览器，刷新页面。
+
+现在，你应该能在“本月概览”下方看到一个新的 **“本月支出类别分析”** 区域。
+
+*   如果你本月有支出记录，这里会显示一个漂亮的饼图，每个扇形代表一个支出类别，大小与该类别的支出金额成比例。
+*   如果你本月还没有任何支出，它会显示“本月暂无支出数据。”的提示。
+*   当你添加新的支出记录时，饼图会实时更新，反映最新的支出结构。
+
+### **Chart.js 饼图说明：**
+
+*   **`renderExpenseChart()` 函数：**
+    *   这个函数会筛选出当前月份的所有支出记录。
+    *   然后，它会遍历这些支出，按类别进行金额汇总。
+    *   根据汇总结果，动态生成饼图的标签（类别名称）和数据（各类别总金额）。
+    *   使用了预设的 `chartColors` 数组来为每个类别分配颜色，确保视觉效果。
+    *   `expenseChartInstance` 变量用来存储 Chart.js 的实例，这样我们可以销毁旧图表再创建新图表，或者直接更新现有图表的数据，提高性能和避免内存泄漏。
+*   **`options` 配置：** 允许我们自定义图表的各种行为，例如图例位置（`position: 'right'`），以及鼠标悬停时显示的信息格式（`tooltip`）。
+
+现在，你的家庭财务管家不仅能帮你记账，还能通过图表帮你分析支出结构了！

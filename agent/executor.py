@@ -100,6 +100,9 @@ class ToolExecutor:
         self._dependency_tools = None
         self._deploy_tools = None
 
+        # Cached handler dispatch map (built once on first use)
+        self._handlers: dict[str, Any] | None = None
+
     def _get_test_tools(self):
         """Lazy-load test tools."""
         if self._test_tools is None:
@@ -215,10 +218,61 @@ class ToolExecutor:
                 execution_time=execution_time,
             )
 
+    def _get_handlers(self) -> dict[str, Any]:
+        """Get or build the handler dispatch map (cached after first call)."""
+        if self._handlers is not None:
+            return self._handlers
+
+        # File tools
+        file_handlers = {
+            "write": lambda: self._file_tools.write_file(self._action_dict),
+            "edit": lambda: self._file_tools.edit_file(self._action_dict),
+            "read": lambda: self._file_tools.read_file(self._action_dict),
+            "mkdir": lambda: self._file_tools.mkdir(self._action_dict),
+            "list_dir": lambda: self._file_tools.list_directory(self._action_dict),
+            "list_files": lambda: self._file_tools.list_directory(self._action_dict),
+            "create_file": lambda: self._file_tools.create_files(self._action_dict),
+        }
+
+        # Execution tools
+        exec_handlers = {
+            "execute": lambda: self._exec_tools.execute_script(self._action_dict),
+            "check_dependencies": lambda: self._exec_tools.check_dependencies(self._action_dict),
+            "run_tests": lambda: self._exec_tools.run_tests(self._action_dict),
+            "pip_install": lambda: self._exec_tools.pip_install(self._action_dict),
+        }
+
+        # Search tools
+        search_handlers = {
+            "search": lambda: self._search_tools.search_files(self._action_dict),
+            "search_web": lambda: self._search_tools.search_web(self._action_dict),
+            "web_fetch": lambda: self._search_tools.fetch_url(self._action_dict),
+        }
+
+        # Git tools
+        git_handlers = {
+            "git": lambda: self._git_tools.git_command(self._action_dict),
+        }
+
+        handlers = {}
+        handlers.update(file_handlers)
+        handlers.update(exec_handlers)
+        handlers.update(search_handlers)
+        handlers.update(git_handlers)
+
+        # Add new tool handlers (lazy import, but only once)
+        self._add_new_tool_handlers(handlers)
+
+        handlers["debug"] = lambda: ToolResult.ok(f"[DEBUG]\n{self._action_dict.get('content') or 'No content'}\n[/DEBUG]")
+        handlers["finish"] = lambda: ToolResult.ok("Task completed successfully")
+
+        self._handlers = handlers
+        return handlers
+
     def _dispatch_action(self, action: Action) -> str:
         """Dispatch action to the appropriate handler using modular tools."""
         # Convert Action to dict for tool handlers
-        action_dict = {
+        self._action_dict = {
             "path": action.path,
             "content": action.content,
             "script": action.script,
@@ -233,50 +287,7 @@ class ToolExecutor:
             "end": action.end,
         }
 
-        # File tools
-        file_handlers = {
-            "write": lambda: self._file_tools.write_file(action_dict),
-            "edit": lambda: self._file_tools.edit_file(action_dict),
-            "read": lambda: self._file_tools.read_file(action_dict),
-            "mkdir": lambda: self._file_tools.mkdir(action_dict),
-            "list_dir": lambda: self._file_tools.list_directory(action_dict),
-            "list_files": lambda: self._file_tools.list_directory(action_dict),
-            "create_file": lambda: self._file_tools.create_files(action_dict),
-        }
-
-        # Execution tools
-        exec_handlers = {
-            "execute": lambda: self._exec_tools.execute_script(action_dict),
-            "check_dependencies": lambda: self._exec_tools.check_dependencies(action_dict),
-            "run_tests": lambda: self._exec_tools.run_tests(action_dict),
-            "pip_install": lambda: self._exec_tools.pip_install(action_dict),
-        }
-
-        # Search tools
-        search_handlers = {
-            "search": lambda: self._search_tools.search_files(action_dict),
-            "search_web": lambda: self._search_tools.search_web(action_dict),
-            "web_fetch": lambda: self._search_tools.fetch_url(action_dict),
-        }
-
-        # Git tools
-        git_handlers = {
-            "git": lambda: self._git_tools.git_command(action_dict),
-        }
-
-        # Combine all handlers
-        handlers = {}
-        handlers.update(file_handlers)
-        handlers.update(exec_handlers)
-        handlers.update(search_handlers)
-        handlers.update(git_handlers)
-
-        # Add new tool handlers (lazy import)
-        self._add_new_tool_handlers(handlers)
-
-        handlers["debug"] = lambda: ToolResult.ok(f"[DEBUG]\n{action.content or 'No content'}\n[/DEBUG]")
-        handlers["finish"] = lambda: ToolResult.ok("Task completed successfully")
-
+        handlers = self._get_handlers()
         handler = handlers.get(action.command)
         if not handler:
             return f"Error: Unknown command '{action.command}'"
@@ -290,11 +301,19 @@ class ToolExecutor:
             return self.workspace
         from pathlib import Path
 
+        # Strip workspace prefix if model returned an absolute/relative path
+        ws = str(Path(self.workspace).resolve())
+        if path.startswith(ws + "/") or path.startswith(ws + "\\"):
+            path = path[len(ws) + 1:]
+        ws_name = Path(self.workspace).name
+        if "/" in path and path.split("/", 1)[0] == ws_name:
+            path = path.split("/", 1)[1]
+
         target = Path(self.workspace) / path
         resolved = target.resolve()
 
         # Security check: ensure path is within workspace
-        if not str(resolved).startswith(str(Path(self.workspace).resolve())):
+        if not str(resolved).startswith(ws):
             return "Error: Path escapes workspace"
         return str(resolved)
 

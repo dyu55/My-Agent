@@ -1,0 +1,312 @@
+其实，我有一个好消息要告诉你：**在你刚才运行的版本中，我已经偷偷帮你把这个功能写进去了！**
+
+在之前的代码里，你会看到这两行关键代码：
+1. `let transactions = JSON.parse(localStorage.getItem('myFinanceData')) || [];` （**读取**：打开网页时，去浏览器的“小抽屉”里找之前的账单）
+2. `localStorage.setItem('myFinanceData', JSON.stringify(transactions));` （**保存**：每次你添加或删除记录时，立刻把新账单塞进浏览器的“小抽屉”）
+
+这个“小抽屉”在编程里叫 **`localStorage` (本地存储)**。它不需要服务器，数据就保存在你电脑浏览器的缓存文件里，关了浏览器、关了电脑，数据都会在。
+
+### ⚠️ 为什么你可能会觉得数据“丢了”？
+
+如果你发现数据没了，通常只有这三个原因：
+1. **使用了“无痕模式/隐身模式” (Incognito/Private Window)**：无痕模式为了隐私，在你关掉窗口的一瞬间，会把所有的“小抽屉”全部清空。
+2. **清理了浏览器缓存/历史记录**：如果你在浏览器设置里点了“清除浏览数据”并勾选了“Cookie 和其他网站数据”，那“小抽屉”也会被清空。
+3. **换了浏览器**：你在 Chrome 里记的账，在 Edge 里是看不见的，因为每个浏览器的“抽屉”是独立的。
+
+---
+
+### 🚀 进阶方案：给你的数据买个“保险”
+
+既然你不想用服务器，但又担心浏览器清理缓存导致数据丢失，我为你增加一个**“终极保险”功能**：**数据备份与恢复**。
+
+我可以为你增加两个按钮：
+1. **“备份数据”**：点击后，它会把你的所有账单生成一个 `.json` 文件下载到你的电脑里。这就是你的“账本副本”。
+2. **“恢复数据”**：如果你换了电脑，或者不小心清理了浏览器，你只需要点击这个按钮，把刚才那个文件传上来，所有的账单就瞬间回来了！
+
+这是升级后的完整代码，我把这个“保险箱”功能加上去了：
+
+```html
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的专业记账本 - 保险箱版</title>
+    <style>
+        /* --- CSS 样式部分 (保持之前的精美设计) --- */
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f2f5; display: flex; justify-content: center; padding: 20px; margin: 0; }
+        .container { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); width: 100%; max-width: 450px; }
+        h2 { text-align: center; color: #1a73e8; margin-top: 0; }
+        .balance-card { background: linear-gradient(135deg, #1a73e8, #0d47a1); color: white; padding: 20px; border-radius: 10px; text-align: center; margin-bottom: 20px; }
+        .balance-card div { font-size: 14px; opacity: 0.8; }
+        .balance-card h1 { font-size: 32px; margin: 10px 0 0 0; }
+        .monthly-stats { background: #f8f9fa; border: 1px solid #e0e0e0; border-radius: 10px; padding: 15px; margin-bottom: 20px; }
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
+        .stat-item { display: flex; flex-direction: column; }
+        .stat-label { font-size: 12px; color: #666; }
+        .stat-value { font-size: 18px; font-weight: bold; }
+        #budget-warning { display: none; color: #e74c3c; text-align: center; font-weight: bold; font-size: 20px; margin: 10px 0; animation: blink 1s infinite; }
+        @keyframes blink { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-size: 14px; color: #555; font-weight: bold; }
+        input, select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; font-size: 14px; }
+        button { width: 100%; padding: 12px; background-color: #1a73e8; color: white; border: none; border-radius: 6px; font-size: 16px; cursor: pointer; margin-bottom: 10px; }
+        button:hover { background-color: #1557b0; }
+        
+        /* --- 新增：备份/恢复按钮样式 --- */
+        .backup-container { display: flex; gap: 10px; margin-bottom: 20px; }
+        .btn-secondary { background-color: #6c757d; font-size: 12px; padding: 8px; }
+        .btn-secondary:hover { background-color: #5a6268; }
+        #file-input { display: none; } /* 隐藏原始的文件上传按钮 */
+
+        .list-title { margin-top: 30px; border-bottom: 2px solid #eee; padding-bottom: 10px; color: #333; }
+        ul { list-style: none; padding: 0; margin-top: 10px; }
+        li { background: #fff; border-bottom: 1px solid #eee; padding: 12px 5px; display: flex; justify-content: space-between; align-items: center; }
+        .record-info { display: flex; flex-direction: column; }
+        .record-main { display: flex; align-items: center; gap: 8px; }
+        .record-category { font-size: 12px; background: #e8f0fe; color: #1a73e8; padding: 2px 6px; border-radius: 4px; }
+        .record-date { font-size: 12px; color: #888; }
+        .record-note { font-size: 13px; color: #666; margin-top: 2px; }
+        .amount-text { font-weight: bold; font-size: 16px; }
+        .amount-plus { color: #2ecc71; }
+        .amount-minus { color: #e74c3c; }
+        .delete-btn { color: #ccc; cursor: pointer; margin-left: 10px; font-size: 18px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>个人财务管理</h2>
+
+    <!-- 1. 总余额卡片 -->
+    <div class="balance-card">
+        <div>所有记录总余额</div>
+        <h1 id="total-balance">¥ 0.00</h1>
+    </div>
+
+    <!-- 2. 本月统计卡片 -->
+    <div class="monthly-stats">
+        <div class="stats-grid">
+            <div class="stat-item">
+                <span class="stat-label">本月收入</span>
+                <span id="month-income" class="stat-value amount-plus">¥ 0.00</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">本月支出</span>
+                <span id="month-expense" class="stat-value amount-minus">¥ 0.00</span>
+            </div>
+        </div>
+        <div id="budget-warning">⚠️ 预算超支！</div>
+        <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #ddd; padding-top: 10px;">
+            <span style="font-weight: bold; color: #333;">本月剩余预算:</span>
+            <span id="month-remaining" class="stat-value">¥ 5000.00</span>
+        </div>
+    </div>
+
+    <!-- 3. 新增：备份与恢复工具栏 -->
+    <div class="backup-container">
+        <button class="btn-secondary" onclick="exportData()">💾 备份数据到电脑</button>
+        <button class="btn-secondary" onclick="document.getElementById('file-input').click()">📂 恢复备份文件</button>
+        <input type="file" id="file-input" accept=".json" onchange="importData(event)">
+    </div>
+
+    <!-- 输入表单 -->
+    <div class="form-container">
+        <div class="form-group">
+            <label>金额 (支出用负数, 如: -50)</label>
+            <input type="number" id="amount" placeholder="例如: 100 或 -50">
+        </div>
+        <div class="form-group">
+            <label>类别</label>
+            <select id="category">
+                <option value="餐饮">餐饮</option>
+                <option value="交通">交通</option>
+                <option value="购物">购物</option>
+                <option value="工资">工资</option>
+                <option value="娱乐">娱乐</option>
+                <option value="其他">其他</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>日期</label>
+            <input type="date" id="date">
+        </div>
+        <div class="form-group">
+            <label>备注 (可选)</label>
+            <input type="text" id="note" placeholder="写点什么说明...">
+        </div>
+        <button onclick="addTransaction()">确认提交</button>
+    </div>
+
+    <h3 class="list-title">历史记录</h3>
+    <ul id="transaction-list"></ul>
+</div>
+
+<script>
+    /* --- JavaScript 逻辑部分 --- */
+
+    const list = document.getElementById('transaction-list');
+    const balanceDisplay = document.getElementById('total-balance');
+    const mIncomeDisplay = document.getElementById('month-income');
+    const mExpenseDisplay = document.getElementById('month-expense');
+    const mRemainingDisplay = document.getElementById('month-remaining');
+    const budgetWarning = document.getElementById('budget-warning');
+    const amountInput = document.getElementById('amount');
+    const categoryInput = document.getElementById('category');
+    const dateInput = document.getElementById('date');
+    const noteInput = document.getElementById('note');
+
+    const MONTHLY_BUDGET = 5000; 
+
+    // 【核心】从 localStorage 读取
+    let transactions = JSON.parse(localStorage.getItem('myFinanceData')) || [];
+
+    window.onload = function() {
+        const today = new Date().toISOString().split('T')[0];
+        dateInput.value = today;
+        init();
+    };
+
+    function init() {
+        list.innerHTML = '';
+        let totalAll = 0;
+        let monthIncome = 0;
+        let monthExpense = 0;
+        
+        const now = new Date();
+        const currentMonthStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+
+        // 按日期排序
+        transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        transactions.forEach((t, index) => {
+            totalAll += t.amount;
+            if (t.date.startsWith(currentMonthStr)) {
+                if (t.amount > 0) {
+                    monthIncome += t.amount;
+                } else {
+                    monthExpense += Math.abs(t.amount);
+                }
+            }
+
+            const li = document.createElement('li');
+            const amountClass = t.amount >= 0 ? 'amount-plus' : 'amount-minus';
+            const amountSign = t.amount >= 0 ? '+' : '';
+            li.innerHTML = `
+                <div class="record-info">
+                    <div class="record-main">
+                        <span class="record-category">${t.category}</span>
+                        <span class="record-date">${t.date}</span>
+                    </div>
+                    <div class="record-note">${t.note || ''}</div>
+                </div>
+                <div style="display: flex; align-items: center;">
+                    <span class="amount-text ${amountClass}">${amountSign}${t.amount.toFixed(2)}</span>
+                    <span class="delete-btn" onclick="deleteTransaction(${index})">&times;</span>
+                </div>
+            `;
+            list.appendChild(li);
+        });
+
+        balanceDisplay.innerText = `¥ ${totalAll.toFixed(2)}`;
+        mIncomeDisplay.innerText = `¥ ${monthIncome.toFixed(2)}`;
+        mExpenseDisplay.innerText = `¥ ${monthExpense.toFixed(2)}`;
+        
+        const remaining = MONTHLY_BUDGET - monthExpense;
+        mRemainingDisplay.innerText = `¥ ${remaining.toFixed(2)}`;
+
+        if (monthExpense > MONTHLY_BUDGET) {
+            budgetWarning.style.display = 'block';
+            mRemainingDisplay.style.color = '#e74c3c';
+        } else {
+            budgetWarning.style.display = 'none';
+            mRemainingDisplay.style.color = '#333';
+        }
+
+        // 【核心】每次改动，都把最新的数据存入 localStorage
+        localStorage.setItem('myFinanceData', JSON.stringify(transactions));
+    }
+
+    function addTransaction() {
+        const amount = parseFloat(amountInput.value);
+        const category = categoryInput.value;
+        const date = dateInput.value;
+        const note = noteInput.value;
+
+        if (isNaN(amount) || date === '') {
+            alert('请填写正确的金额和日期');
+            return;
+        }
+
+        transactions.push({ amount, category, date, note });
+        amountInput.value = '';
+        noteInput.value = '';
+        init();
+    }
+
+    function deleteTransaction(index) {
+        if(confirm('确定要删除这条记录吗？')) {
+            transactions.splice(index, 1);
+            init();
+        }
+    }
+
+    /* --- 【新增功能】备份与恢复逻辑 --- */
+
+    // 备份功能：将数据变成一个文件下载
+    function exportData() {
+        if (transactions.length === 0) {
+            alert("目前没有数据可以备份！");
+            return;
+        }
+        const dataStr = JSON.stringify(transactions, null, 2); // 格式化一下，让文件好看点
+        const blob = new Blob([dataStr], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `my_finance_backup_${new Date().toISOString().split('T')[0]}.json`;
+        link.click();
+        URL.revokeObjectURL(url);
+    }
+
+    // 恢复功能：读取用户上传的文件
+    function importData(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const importedData = JSON.parse(e.target.result);
+                if (Array.isArray(importedData)) {
+                    if (confirm('这将覆盖你当前的所有记录，确定吗？')) {
+                        transactions = importedData;
+                        init();
+                        alert('数据恢复成功！');
+                    }
+                } else {
+                    alert('文件格式不正确！');
+                }
+            } catch (err) {
+                alert('读取文件失败，请确保这是一个正确的备份文件。');
+            }
+        };
+        reader.readAsText(file);
+    }
+</script>
+
+</body>
+</html>
+```
+
+### 🛠️ 你现在该怎么做？
+
+1.  **更新代码**：把这段代码保存到你的 `index.html`。
+2.  **日常使用**：正常记账，数据会自动存在浏览器里。
+3.  **养成习惯（最重要！）**：**每周或每月点击一次“备份数据到电脑”**。把下载下来的那个 `.json` 文件存放在你的网盘、U盘或者邮箱里。
+4.  **万一出事了**：如果哪天你清理了浏览器，或者换了新电脑，只要把那个 `.json` 文件拿出来，点击“恢复备份文件”，你的账单就**全回来了**！
+
+**这样，你就拥有了一个完全属于自己、不需要服务器、且数据极其安全的财务管理工具！**
+
+你想尝试一下这个备份功能吗？或者，你觉得现在的界面还需要增加什么功能（比如：分月份查看历史记录）？

@@ -1,0 +1,435 @@
+这个需求非常专业！有了图表，你的记账本就不再只是一个“记事本”，而是一个真正的“财务分析工具”了。
+
+为了实现这个功能，我们不能自己从头写绘图算法（那太难了），我们需要引入一个世界上最流行的绘图库 —— **Chart.js**。它非常强大，能做出非常丝滑、漂亮的动画效果，而且对移动端非常友好。
+
+我为你做了以下升级：
+1.  **引入 Chart.js**：通过一行代码引入这个“绘图大师”。
+2.  **新增“消费分布”卡片**：在统计数据下方增加了一个圆环图（Doughnut Chart）。圆环图比饼图看起来更现代、更高级。
+3.  **自动分类计算逻辑**：我写了一段逻辑，它会自动扫描你本月的记录，把属于“餐饮”的钱加在一起，把属于“交通”的钱加在一起，然后交给绘图大师去画图。
+4.  **色彩联动**：图表的颜色会根据你的类别自动分配，保持整体视觉的和谐。
+
+请直接用下面的代码**覆盖**你的 `index.html`：
+
+```html
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>温馨家账本 - 图表版</title>
+    <!-- 引入 Chart.js 绘图库 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* --- 核心设计变量 (保持温馨风格) --- */
+        :root {
+            --bg-color: #fdfbf7;
+            --card-bg: #ffffff;
+            --primary-color: #7da684;
+            --secondary-color: #e9967a;
+            --text-main: #4a4a4a;
+            --text-sub: #8e8e8e;
+            --danger: #e74c3c;
+            --shadow: 0 10px 30px rgba(0,0,0,0.05);
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+            background-color: var(--bg-color); 
+            color: var(--text-main);
+            margin: 0; padding: 0;
+            display: flex; justify-content: center;
+        }
+
+        .container { width: 100%; max-width: 480px; padding: 20px; padding-bottom: 100px; }
+        h2 { text-align: center; font-weight: 600; color: var(--primary-color); margin-bottom: 25px; }
+
+        .card {
+            background: var(--card-bg);
+            border-radius: 24px;
+            padding: 20px;
+            box-shadow: var(--shadow);
+            margin-bottom: 20px;
+        }
+
+        /* 总余额卡片 */
+        .balance-card {
+            background: linear-gradient(135deg, #a8c69f, #7da684);
+            color: white;
+            text-align: center;
+        }
+        .balance-card div { font-size: 14px; opacity: 0.9; margin-bottom: 5px; }
+        .balance-card h1 { font-size: 36px; margin: 0; }
+
+        /* 统计卡片 */
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .stat-item { text-align: center; }
+        .stat-label { font-size: 12px; color: var(--text-sub); margin-bottom: 4px; }
+        .stat-value { font-size: 18px; font-weight: bold; }
+        .amount-plus { color: #5ba37a; }
+        .amount-minus { color: var(--secondary-color); }
+
+        #budget-warning { 
+            display: none; color: var(--danger); text-align: center; 
+            font-weight: bold; margin: 10px 0; font-size: 16px;
+            animation: shake 0.5s ease-in-out infinite;
+        }
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+
+        /* --- 新增：图表卡片样式 --- */
+        .chart-container {
+            position: relative;
+            height: 220px; /* 给图表一个固定高度 */
+            width: 100%;
+            margin-top: 10px;
+        }
+
+        /* 表单设计 */
+        .form-group { margin-bottom: 18px; }
+        label { display: block; margin-bottom: 8px; font-size: 14px; color: var(--text-main); font-weight: 500; }
+        input, select { 
+            width: 100%; padding: 14px; border: 1.5px solid #f0f0f0; 
+            border-radius: 16px; font-size: 16px; background-color: #fafafa; 
+            outline: none; transition: all 0.3s;
+        }
+        input:focus, select:focus { border-color: var(--primary-color); background-color: #fff; }
+
+        .btn-submit { 
+            width: 100%; padding: 16px; background-color: var(--primary-color); 
+            color: white; border: none; border-radius: 16px; font-size: 18px; 
+            font-weight: 600; cursor: pointer; box-shadow: 0 4px 15px rgba(125, 166, 132, 0.3);
+        }
+
+        .backup-group { display: flex; gap: 10px; margin-bottom: 20px; }
+        .btn-small { flex: 1; padding: 10px; font-size: 12px; background: #eee; border: none; border-radius: 12px; color: var(--text-sub); }
+
+        /* 列表设计 */
+        .list-title { font-size: 18px; margin: 30px 0 15px 10px; color: var(--text-main); }
+        ul { list-style: none; padding: 0; }
+        li { 
+            background: var(--card-bg); border-radius: 18px; padding: 15px; 
+            margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.02);
+        }
+        .record-left { display: flex; flex-direction: column; }
+        .record-cat { font-size: 13px; font-weight: 600; color: var(--primary-color); }
+        .record-date { font-size: 11px; color: var(--text-sub); margin-top: 2px; }
+        .record-note { font-size: 13px; color: var(--text-main); margin-top: 4px; }
+        .record-right { text-align: right; display: flex; align-items: center; }
+        .amount-val { font-weight: bold; font-size: 16px; margin-right: 10px; }
+        .del-icon { color: #ddd; font-size: 20px; padding: 0 5px; }
+
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>🏡 温馨家账本</h2>
+
+    <!-- 1. 总余额卡片 -->
+    <div class="card balance-card">
+        <div>当前家庭总资产</div>
+        <h1 id="total-balance">¥ 0.00</h1>
+    </div>
+
+    <!-- 2. 本月统计卡片 -->
+    <div class="card">
+        <div class="stats-grid">
+            <div class="stat-item">
+                <div class="stat-label">本月收入 💰</div>
+                <div id="month-income" class="stat-value amount-plus">¥ 0.00</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">本月支出 🛒</div>
+                <div id="month-expense" class="stat-value amount-minus">¥ 0.00</div>
+            </div>
+        </div>
+        <div id="budget-warning">⚠️ 预算超支啦！</div>
+        <div style="margin-top: 15px; padding-top: 15px; border-top: 1px dashed #eee; display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 14px; color: var(--text-sub);">本月剩余预算:</span>
+            <span id="month-remaining" style="font-weight: bold; font-size: 18px;">¥ 5000.00</span>
+        </div>
+    </div>
+
+    <!-- 3. 新增：消费分析卡片 (图表) -->
+    <div class="card">
+        <div class="stat-label" style="text-align: center; margin-bottom: 10px;">本月支出占比分析 📊</div>
+        <div class="chart-container">
+            <canvas id="categoryChart"></canvas>
+        </div>
+    </div>
+
+    <!-- 4. 备份工具 -->
+    <div class="backup-group">
+        <button class="btn-small" onclick="exportData()">💾 备份数据</button>
+        <button class="btn-small" onclick="document.getElementById('file-input').click()">📂 恢复数据</button>
+        <input type="file" id="file-input" accept=".json" onchange="importData(event)" style="display:none">
+    </div>
+
+    <!-- 5. 输入表单 -->
+    <div class="card">
+        <div class="form-group">
+            <label>金额 (支出请写负数，如 -20)</label>
+            <input type="number" id="amount" placeholder="0.00">
+        </div>
+        <div class="form-group">
+            <label>类别</label>
+            <select id="category">
+                <option value="🍎 餐饮">🍎 餐饮</option>
+                <option value="🚗 交通">🚗 交通</option>
+                <option value="🛍️ 购物">🛍️ 购物</option>
+                <option value="💵 工资">💵 工资</option>
+                <option value="🎬 娱乐">🎬 娱乐</option>
+                <option value="🏠 居家">🏠 居家</option>
+                <option value="✨ 其他">✨ 其他</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>日期</label>
+            <input type="date" id="date">
+        </div>
+        <div class="form-group">
+            <label>备注</label>
+            <input type="text" id="note" placeholder="例如：买水果">
+        </div>
+        <button class="btn-submit" onclick="addTransaction()">确认记账</button>
+    </div>
+
+    <div class="list-title">📝 最近记录</div>
+    <ul id="transaction-list"></ul>
+</div>
+
+<script>
+    /* --- JavaScript 逻辑 --- */
+
+    const list = document.getElementById('transaction-list');
+    const balanceDisplay = document.getElementById('total-balance');
+    const mIncomeDisplay = document.getElementById('month-income');
+    const mExpenseDisplay = document.getElementById('month-expense');
+    const mRemainingDisplay = document.getElementById('month-remaining');
+    const budgetWarning = document.getElementById('budget-warning');
+    
+    const amountInput = document.getElementById('amount');
+    const categoryInput = document.getElementById('category');
+    const dateInput = document.getElementById('date');
+    const noteInput = document.getElementById('note');
+
+    const MONTHLY_BUDGET = 5000; 
+    let transactions = JSON.parse(localStorage.getItem('myFinanceData')) || [];
+    
+    // 【新增】用于存储图表实例，防止重复创建导致内存泄漏或闪烁
+    let myChart = null;
+
+    window.onload = function() {
+        const today = new Date().toISOString().split('T')[0];
+        dateInput.value = today;
+        init();
+    };
+
+    function init() {
+        list.innerHTML = '';
+        let totalAll = 0;
+        let monthIncome = 0;
+        let monthExpense = 0;
+        
+        // 用于统计分类支出的对象
+        // 格式如: { "🍎 餐饮": 150, "🚗 交通": 50 }
+        const categoryDataMap = {};
+
+        const now = new Date();
+        const currentMonthStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+
+        // 按日期排序
+        transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        transactions.forEach((t, index) => {
+            totalAll += t.amount;
+            
+            // 统计本月数据
+            if (t.date.startsWith(currentMonthStr)) {
+                if (t.amount > 0) {
+                    monthIncome += t.amount;
+                } else {
+                    const absAmount = Math.abs(t.amount);
+                    monthExpense += absAmount;
+                    
+                    // 【新增】累加该类别的支出金额
+                    categoryDataMap[t.category] = (categoryDataMap[t.category] || 0) + absAmount;
+                }
+            }
+
+            // 渲染列表
+            const li = document.createElement('li');
+            const isPlus = t.amount >= 0;
+            li.innerHTML = `
+                <div class="record-left">
+                    <div class="record-cat">${t.category}</div>
+                    <div class="record-date">${t.date}</div>
+                    ${t.note ? `<div class="record-note">${t.note}</div>` : ''}
+                </div>
+                <div class="record-right">
+                    <span class="amount-val ${isPlus ? 'amount-plus' : 'amount-minus'}">${isPlus ? '+' : ''}${t.amount.toFixed(2)}</span>
+                    <span class="del-icon" onclick="deleteTransaction(${index})">&times;</span>
+                </div>
+            `;
+            list.appendChild(li);
+        });
+
+        // 更新文字显示
+        balanceDisplay.innerText = `¥ ${totalAll.toFixed(2)}`;
+        mIncomeDisplay.innerText = `¥ ${monthIncome.toFixed(2)}`;
+        mExpenseDisplay.innerText = `¥ ${monthExpense.toFixed(2)}`;
+        
+        const remaining = MONTHLY_BUDGET - monthExpense;
+        mRemainingDisplay.innerText = `¥ ${remaining.toFixed(2)}`;
+        mRemainingDisplay.style.color = remaining < 0 ? 'var(--danger)' : 'var(--text-main)';
+
+        if (monthExpense > MONTHLY_BUDGET) {
+            budgetWarning.style.display = 'block';
+        } else {
+            budgetWarning.style.display = 'none';
+        }
+
+        // 【核心】更新图表
+        updateChart(categoryDataMap);
+
+        localStorage.setItem('myFinanceData', JSON.stringify(transactions));
+    }
+
+    // 【新增】更新图表的函数
+    function updateChart(categoryMap) {
+        const ctx = document.getElementById('categoryChart').getContext('2d');
+        
+        // 准备数据
+        const labels = Object.keys(categoryMap);
+        const dataValues = Object.values(categoryMap);
+
+        // 如果这个月没有任何支出，显示提示或清空图表
+        if (labels.length === 0) {
+            if (myChart) myChart.destroy();
+            return;
+        }
+
+        // 如果之前已经有一个图表了，先把它销毁，否则新旧数据会重叠
+        if (myChart) {
+            myChart.destroy();
+        }
+
+        // 创建新图表
+        myChart = new Chart(ctx, {
+            type: 'doughnut', // 圆环图
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: dataValues,
+                    backgroundColor: [
+                        '#7da684', '#e9967a', '#f4d03f', '#5dade2', '#af7ac5', '#ec7063', '#aab7b8'
+                    ],
+                    borderWidth: 0,
+                    hoverOffset: 10
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false, // 让图表填充容器
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            usePointStyle: true,
+                            padding: 20,
+                            font: { size: 12 }
+                        }
+                    }
+                },
+                cutout: '60%' // 圆环中间的空心程度
+            }
+        });
+    }
+
+    function addTransaction() {
+        const amount = parseFloat(amountInput.value);
+        const category = categoryInput.value;
+        const date = dateInput.value;
+        const note = noteInput.value;
+
+        if (isNaN(amount) || date === '') {
+            alert('请填写金额和日期哦~');
+            return;
+        }
+
+        transactions.push({ amount, category, date, note });
+        amountInput.value = '';
+        noteInput.value = '';
+        init();
+    }
+
+    function deleteTransaction(index) {
+        if(confirm('确定要删除这条记录吗？')) {
+            transactions.splice(index, 1);
+            init();
+        }
+    }
+
+    function exportData() {
+        if (transactions.length === 0) return alert("没有数据可以备份");
+        const dataStr = JSON.stringify(transactions, null, 2);
+        const blob = new Blob([dataStr], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `家账本备份_${new Date().toLocaleDateString()}.json`;
+        link.click();
+    }
+
+    function importData(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const data = JSON.parse(e.target.result);
+                if (confirm('导入将覆盖当前数据，确定吗？')) {
+                    transactions = data;
+                    init();
+                }
+            } catch (err) { alert('文件格式错误'); }
+        };
+        reader.readAsText(file);
+    }
+</script>
+
+</body>
+</html>
+```
+
+### 📈 现在的变化：
+
+1.  **直观的视觉分析**：
+    *   我在统计卡片下方新增了一个“**消费占比分析**”圆环图。
+    *   当你输入一笔“🍎 餐饮”支出后，图表会自动增加一个绿色的切片。
+    *   当你输入一笔“🛍️ 购物”支出后，图表会自动增加一个橘色的切片。
+    *   通过切片的大小，你瞬间就能明白：**“哎呀，这个月我的钱都花在吃上面了！”**
+
+2.  **智能数据处理**：
+    *   图表是**动态**的。它只统计**本月**的**支出**（负数）。
+    *   如果你输入了一笔工资（收入），图表是不会变化的，这保证了分析的准确性——我们分析的是“钱花哪了”，而不是“钱从哪来”。
+
+3.  **技术细节（给你的小知识）**：
+    *   **`myChart.destroy()`**：这是非常关键的一步。在编程中，如果你在一个位置反复画新图而不把旧图擦掉，旧图的颜色和数据会堆积在一起，导致显示错乱。这行代码保证了每次你添加新账单时，旧图会被彻底清理，只画一张全新的。
+    *   **`responsive: true`**：这确保了无论你在 iPhone 还是安卓手机上打开，图表都会自动调整大小，不会超出屏幕。
+
+### 🧪 试试看：
+
+1.  先清空一下你的数据（或者直接重新打开页面）。
+2.  输入一笔 `-100`，类别选“🍎 餐饮”。
+3.  输入一笔 `-50`，类别选“🚗 交通”。
+4.  输入一笔 `-200`，类别选“🛍️ 购物”。
+5.  **盯着那个圆环图**，看看它是不是随着你的输入，像呼吸一样自动变化了？
+
+**现在，你的工具已经具备了：记录、统计、预警、数据备份、可视化分析这五大完整功能！你觉得还有什么功能是你想加上的吗？（比如：按月份切换查看历史统计？）**

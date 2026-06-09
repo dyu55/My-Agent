@@ -26,7 +26,10 @@ class Command:
 
     def matches(self, input_str: str) -> bool:
         """Check if input matches this command or its aliases."""
-        name = input_str.lstrip("/").split()[0].lower()
+        parts = input_str.lstrip("/").split()
+        if not parts:
+            return False
+        name = parts[0].lower()
         return name == self.name.lower() or name in [a.lower() for a in self.aliases]
 
 
@@ -40,7 +43,11 @@ class CLIContext:
     task_result: str | None = None
     mcp_client: Any = None
     current_monitor: ProcessMonitor | None = None
-    external_memory_manager: Any = None  # 外部记忆管理器
+    external_memory_manager: Any = None
+    think_model: str | None = None
+    think_provider: str | None = None
+    execute_model: str | None = None
+    execute_provider: str | None = None
 
     @property
     def current_model(self) -> str:
@@ -49,6 +56,18 @@ class CLIContext:
     @property
     def current_provider(self) -> str:
         return self.model_manager.current_provider
+
+
+# Lazy display import to avoid circular deps
+_display = None
+
+
+def _get_display():
+    global _display
+    if _display is None:
+        from .display import Display
+        _display = Display()
+    return _display
 
 
 class CommandRegistry:
@@ -60,29 +79,27 @@ class CommandRegistry:
 
     def _register_builtins(self) -> None:
         """Register built-in commands."""
-        self.register(Command(name="help", description="显示帮助信息", aliases=["h", "?"], handler=self._cmd_help))
-        self.register(Command(name="exit", description="退出 CLI", aliases=["quit", "q"], handler=self._cmd_exit))
-        self.register(Command(name="clear", description="清屏", aliases=["cls"], handler=self._cmd_clear))
-        self.register(Command(name="model", description="显示/切换模型", aliases=["m"], handler=self._cmd_model))
-        self.register(Command(name="provider", description="显示/切换 provider", aliases=["p"], handler=self._cmd_provider))
-        self.register(Command(name="context", description="显示当前上下文", aliases=["c"], handler=self._cmd_context))
-        self.register(Command(name="ls", description="列出工作目录文件", aliases=["dir"], handler=self._cmd_ls))
-        self.register(Command(name="cd", description="切换工作目录", handler=self._cmd_cd))
-        self.register(Command(name="run", description="执行命令", aliases=["!"], handler=self._cmd_run))
-        self.register(Command(name="task", description="执行任务", aliases=["t"], handler=self._cmd_task))
-        self.register(Command(name="status", description="显示 agent 状态", aliases=["s"], handler=self._cmd_status))
-        # MCP
-        self.register(Command(name="mcp", description="MCP 服务器管理", handler=self._cmd_mcp))
-        # Watch
-        self.register(Command(name="watch", description="监控进程输出", handler=self._cmd_watch))
-        # Skills
-        self.register(Command(name="code-review", description="代码审查", aliases=["review", "cr"], handler=self._cmd_code_review))
-        self.register(Command(name="security-review", description="安全审查", aliases=["security", "sec"], handler=self._cmd_security_review))
-        self.register(Command(name="simplify", description="代码简化重构", aliases=["refactor"], handler=self._cmd_simplify))
-        self.register(Command(name="init", description="初始化 CLAUDE.md", handler=self._cmd_init))
-        # External Memory
-        self.register(Command(name="external-memory", description="外部记忆模式", aliases=["em", "memory"], handler=self._cmd_external_memory))
-        self.register(Command(name="memory-status", description="查看记忆状态", aliases=["mem"], handler=self._cmd_memory_status))
+        self.register(Command(name="help", description="Show help", aliases=["h", "?"], handler=self._cmd_help))
+        self.register(Command(name="exit", description="Exit CLI", aliases=["quit", "q"], handler=self._cmd_exit))
+        self.register(Command(name="clear", description="Clear screen", aliases=["cls"], handler=self._cmd_clear))
+        self.register(Command(name="model", description="Show/switch model", aliases=["m"], handler=self._cmd_model))
+        self.register(Command(name="provider", description="Show/switch provider", aliases=["p"], handler=self._cmd_provider))
+        self.register(Command(name="context", description="Show current context", aliases=["c"], handler=self._cmd_context))
+        self.register(Command(name="ls", description="List workspace files", aliases=["dir"], handler=self._cmd_ls))
+        self.register(Command(name="cd", description="Change workspace directory", handler=self._cmd_cd))
+        self.register(Command(name="run", description="Run shell command", aliases=["!"], handler=self._cmd_run))
+        self.register(Command(name="task", description="Execute task", aliases=["t"], handler=self._cmd_task))
+        self.register(Command(name="status", description="Show agent status", aliases=["s"], handler=self._cmd_status))
+        self.register(Command(name="mcp", description="MCP server management", handler=self._cmd_mcp))
+        self.register(Command(name="watch", description="Monitor process output", handler=self._cmd_watch))
+        self.register(Command(name="code-review", description="Code review", aliases=["review", "cr"], handler=self._cmd_code_review))
+        self.register(Command(name="security-review", description="Security review", aliases=["security", "sec"], handler=self._cmd_security_review))
+        self.register(Command(name="simplify", description="Code simplification", aliases=["refactor"], handler=self._cmd_simplify))
+        self.register(Command(name="init", description="Initialize CLAUDE.md", handler=self._cmd_init))
+        self.register(Command(name="external-memory", description="External memory mode", aliases=["em", "memory"], handler=self._cmd_external_memory))
+        self.register(Command(name="memory-status", description="View memory state", aliases=["mem"], handler=self._cmd_memory_status))
+        self.register(Command(name="cost", description="Show API cost report", handler=self._cmd_cost))
+        self.register(Command(name="cache", description="Show LLM cache stats", handler=self._cmd_cache))
 
     def register(self, command: Command) -> None:
         self.commands.append(command)
@@ -96,215 +113,255 @@ class CommandRegistry:
     def get_all(self) -> list[Command]:
         return self.commands
 
-    # Command handlers
+    # ── Command handlers ─────────────────────────────────
 
     def _cmd_help(self, ctx: CLIContext, args: list[str]) -> None:
-        print("\n📖 可用命令:\n")
-        for cmd in self.commands:
-            aliases = f" ({', '.join(cmd.aliases)})" if cmd.aliases else ""
-            print(f"  /{cmd.name}{aliases} - {cmd.description}")
-        print("\n💡 提示: 直接输入内容与模型对话")
-        print("   输入 /task <描述> 让 agent 执行任务\n")
+        d = _get_display()
+        commands = [
+            (f"/{cmd.name}, {', '.join('/' + a for a in cmd.aliases)}" if cmd.aliases else f"/{cmd.name}",
+             cmd.description,
+             "")
+            for cmd in self.commands
+        ]
+        d.help_table(commands)
 
     def _cmd_exit(self, ctx: CLIContext, args: list[str]) -> None:
         if ctx.current_monitor:
             ctx.current_monitor.stop()
-        print("👋 再见!")
+        _get_display().info("Goodbye!")
         sys.exit(0)
 
     def _cmd_clear(self, ctx: CLIContext, args: list[str]) -> None:
-        os.system("cls" if os.name == "nt" else "clear")
+        _get_display().clear()
 
     def _cmd_model(self, ctx: CLIContext, args: list[str]) -> None:
-        """Display or switch models."""
+        d = _get_display()
+
         if not args:
-            # List current model
-            print(f"📦 当前模型: {ctx.current_model}")
-            print(f"🌐 当前 Provider: {ctx.current_provider}")
-            print()
+            # Show all models
+            d.model_info(ctx.current_model, ctx.current_provider)
+            if ctx.think_model:
+                think = f"{ctx.think_provider or ctx.current_provider}/{ctx.think_model}"
+                print(f"  🧠 Think:    {think}")
+            if ctx.execute_model:
+                exec_m = f"{ctx.execute_provider or ctx.current_provider}/{ctx.execute_model}"
+                print(f"  ⚡ Execute:  {exec_m}")
             return
 
-        # Parse model name (may include provider prefix)
-        model_arg = args[0]
+        # Subcommand: think or execute
+        if args[0].lower() in ("think", "execute"):
+            role = args[0].lower()
+            if len(args) < 2:
+                d.error(f"Usage: /model {role} <model_name>")
+                return
+            model_arg = args[1]
+            if "/" in model_arg:
+                provider, model = model_arg.split("/", 1)
+            else:
+                provider = ctx.current_provider
+                model = model_arg
 
+            if role == "think":
+                ctx.think_model = model
+                ctx.think_provider = provider
+                d.success(f"Think model set to: {provider}/{model}")
+            else:
+                ctx.execute_model = model
+                ctx.execute_provider = provider
+                d.success(f"Execute model set to: {provider}/{model}")
+            return
+
+        # Default: set the main model
+        model_arg = args[0]
         if "/" in model_arg:
-            # Format: provider/model
             provider, model = model_arg.split("/", 1)
             success = ctx.model_manager.set_model(provider.lower(), model)
         else:
-            # Just model name, use current provider
             success = ctx.model_manager.set_model(ctx.current_provider, model_arg)
 
         if success:
-            print(f"✅ 模型已切换为: {ctx.model_manager.get_status()}")
+            d.success(f"Model switched to: {ctx.model_manager.get_status()}")
         else:
-            print(f"❌ 切换模型失败")
+            d.error("Failed to switch model")
 
     def _cmd_provider(self, ctx: CLIContext, args: list[str]) -> None:
-        """Display or switch providers."""
+        d = _get_display()
         if not args:
-            print(f"🌐 当前 provider: {ctx.current_provider}")
-            print("\n可用 providers:")
-            for p in ModelProviderFactory.list_providers():
-                print(f"   - {p}")
-            print()
+            providers = ModelProviderFactory.list_providers()
+            d.provider_list(ctx.current_provider, providers)
             return
 
         provider = args[0].lower()
         model = args[1] if len(args) > 1 else None
-
         success = ctx.model_manager.set_model(provider, model)
         if success:
-            print(f"✅ Provider 已切换为: {ctx.model_manager.get_status()}")
+            d.success(f"Provider switched to: {ctx.model_manager.get_status()}")
         else:
-            print(f"❌ 切换 provider 失败")
+            d.error("Failed to switch provider")
 
     def _cmd_context(self, ctx: CLIContext, args: list[str]) -> None:
-        print(f"\n📊 当前上下文:")
-        print(f"   模型: {ctx.current_model}")
-        print(f"   Provider: {ctx.current_provider}")
-        print(f"   工作目录: {ctx.workspace}")
-        print(f"   任务执行中: {'是' if ctx.is_executing_task else '否'}")
+        d = _get_display()
+        data = {
+            "Model": ctx.current_model,
+            "Provider": ctx.current_provider,
+            "Workspace": str(ctx.workspace),
+            "Task running": "Yes" if ctx.is_executing_task else "No",
+        }
         if ctx.task_result:
-            print(f"   上次结果: {ctx.task_result[:100]}...")
+            data["Last result"] = ctx.task_result[:100]
         if ctx.mcp_client:
-            print(f"   MCP 状态: {ctx.mcp_client.get_status()}")
-        print()
+            data["MCP"] = ctx.mcp_client.get_status()
+        d.context_panel(data)
 
     def _cmd_ls(self, ctx: CLIContext, args: list[str]) -> None:
+        d = _get_display()
         path = ctx.workspace / (args[0] if args else ".")
         if not path.exists():
-            print(f"❌ 目录不存在: {path}")
+            d.error(f"Directory not found: {path}")
             return
-        print(f"\n📁 {path}:\n")
-        for item in sorted(path.iterdir()):
-            prefix = "📂" if item.is_dir() else "📄"
-            print(f"   {prefix} {item.name}")
-        print()
+
+        entries = []
+        try:
+            for item in sorted(path.iterdir()):
+                if item.is_dir():
+                    entries.append((item.name, True, ""))
+                else:
+                    size = item.stat().st_size
+                    if size < 1024:
+                        size_str = f"{size}B"
+                    elif size < 1024 * 1024:
+                        size_str = f"{size / 1024:.1f}K"
+                    else:
+                        size_str = f"{size / (1024 * 1024):.1f}M"
+                    entries.append((item.name, False, size_str))
+        except PermissionError:
+            d.error(f"Permission denied: {path}")
+            return
+
+        d.directory_listing(path, entries)
 
     def _cmd_cd(self, ctx: CLIContext, args: list[str]) -> None:
+        d = _get_display()
         if not args:
             ctx.workspace = Path.cwd()
-            print(f"✅ 已切换到: {ctx.workspace}")
+            d.success(f"Changed to: {ctx.workspace}")
             return
         new_path = ctx.workspace / args[0]
         if not new_path.exists():
-            print(f"❌ 目录不存在: {new_path}")
+            d.error(f"Directory not found: {new_path}")
             return
         ctx.workspace = new_path.resolve()
-        print(f"✅ 已切换到: {ctx.workspace}")
+        d.success(f"Changed to: {ctx.workspace}")
 
     def _cmd_run(self, ctx: CLIContext, args: list[str]) -> None:
+        d = _get_display()
         if not args:
-            print("❌ 请提供要执行的命令")
+            d.error("Usage: /run <command>")
             return
+
         cmd = " ".join(args)
-        print(f"\n⚡ 执行: {cmd}\n")
         try:
-            result = subprocess.run(cmd, shell=True, capture_output=True, text=True, cwd=str(ctx.workspace))
+            result = subprocess.run(
+                cmd, shell=True, capture_output=True, text=True, cwd=str(ctx.workspace), timeout=60,
+            )
+            output = ""
             if result.stdout:
-                print(result.stdout)
+                output += result.stdout
             if result.stderr:
-                print(f"❌ Stderr: {result.stderr}")
-            print(f"\n📊 Exit code: {result.returncode}\n")
+                output += ("\n" if output else "") + result.stderr
+            if not output:
+                output = f"(no output, exit code: {result.returncode})"
+            d.command_output(output, title=f"Shell  exit:{result.returncode}")
+        except subprocess.TimeoutExpired:
+            d.error("Command timed out (60s)")
         except Exception as e:
-            print(f"❌ 执行失败: {e}\n")
+            d.error(f"Execution failed: {e}")
 
     def _cmd_task(self, ctx: CLIContext, args: list[str]) -> None:
         pass  # Handled by interface
 
     def _cmd_status(self, ctx: CLIContext, args: list[str]) -> None:
-        print(f"\n🤖 Agent 状态:")
-        print(f"   任务执行中: {'是 ✅' if ctx.is_executing_task else '否'}")
-        print(f"   模型: {ctx.current_model}")
-        print(f"   Provider: {ctx.current_provider}")
-        print(f"   工作目录: {ctx.workspace}")
+        d = _get_display()
+        data = {
+            "Task running": "Yes" if ctx.is_executing_task else "No",
+            "Model": ctx.current_model,
+            "Provider": ctx.current_provider,
+            "Workspace": str(ctx.workspace),
+        }
         if ctx.task_result:
-            print(f"   上次结果: {ctx.task_result[:100]}...")
+            data["Last result"] = ctx.task_result[:100]
         if ctx.mcp_client:
-            print(f"   MCP 服务器: {ctx.mcp_client.get_status()}")
-        print()
+            data["MCP"] = ctx.mcp_client.get_status()
+        d.status_panel(data)
 
     def _cmd_mcp(self, ctx: CLIContext, args: list[str]) -> None:
-        """MCP server management."""
+        d = _get_display()
         if not ctx.mcp_client:
             try:
                 from mcp import create_mcp_client
                 ctx.mcp_client = create_mcp_client()
             except ImportError:
-                print("❌ MCP 模块未安装")
+                d.error("MCP module not installed")
                 return
 
         if not args or args[0] == "status":
             status = ctx.mcp_client.get_status()
-            print("\n🔌 MCP 服务器状态:")
-            for name, info in status.items():
-                state_icon = {"connected": "🟢", "disconnected": "⚪", "error": "🔴"}.get(info["state"], "❓")
-                print(f"   {state_icon} {name}: {info['state']}")
-                if info["tools"]:
-                    print(f"      工具: {', '.join(info['tools'])}")
-            print()
+            d.mcp_status(status)
         elif args[0] == "connect" and len(args) > 1:
             server_name = args[1]
             if ctx.mcp_client.connect(server_name):
-                print(f"✅ 已连接到 MCP 服务器: {server_name}")
+                d.success(f"Connected to MCP server: {server_name}")
             else:
-                print(f"❌ 连接 MCP 服务器失败: {server_name}")
+                d.error(f"Failed to connect: {server_name}")
         elif args[0] == "disconnect" and len(args) > 1:
             ctx.mcp_client.disconnect(args[1])
-            print(f"✅ 已断开 MCP 服务器: {args[1]}")
+            d.success(f"Disconnected: {args[1]}")
         elif args[0] == "tools":
             tools = ctx.mcp_client.list_tools()
-            print("\n🔧 可用工具:")
-            for tool in tools:
-                print(f"   - {tool['name']}: {tool['description']}")
-            print()
+            table_data = [(t["name"], t["description"]) for t in tools]
+            d.info(f"Available tools: {len(table_data)}")
+            for name, desc in table_data:
+                d.plain(f"  {name}: {desc}")
         else:
-            print("用法: /mcp [status|connect <name>|disconnect <name>|tools]")
+            d.info("Usage: /mcp [status|connect <name>|disconnect <name>|tools]")
 
     def _cmd_watch(self, ctx: CLIContext, args: list[str]) -> None:
-        """Watch process output."""
+        d = _get_display()
         if not args:
             if ctx.current_monitor and ctx.current_monitor.state.value == "running":
-                print("\n📺 当前监控状态:")
-                print(ctx.current_monitor.get_summary())
-                print("\n最近的输出:")
-                print(ctx.current_monitor.get_recent_output())
+                d.info("Current monitor:")
+                d.plain(ctx.current_monitor.get_summary())
+                d.plain(ctx.current_monitor.get_recent_output())
             else:
-                print("用法: /watch <command> [args...]")
+                d.info("Usage: /watch <command> [args...]")
             return
 
-        # Stop existing monitor
         if ctx.current_monitor:
             ctx.current_monitor.stop()
 
-        # Parse command
         cmd = " ".join(args)
-        print(f"\n📺 开始监控: {cmd}")
-        print("按 Ctrl+C 停止监控\n")
+        d.info(f"Monitoring: {cmd}")
 
         config = MonitorConfig()
         ctx.current_monitor = ProcessMonitor(config)
 
         if ctx.current_monitor.start(cmd, cwd=ctx.workspace):
             try:
-                # Keep running until interrupted
                 while ctx.current_monitor.state.value == "running":
                     time.sleep(0.5)
-                    # Print new events
                     recent = ctx.current_monitor.get_recent_output(10)
                     if recent:
-                        print(recent)
+                        d.plain(recent)
             except KeyboardInterrupt:
                 ctx.current_monitor.stop()
-                print("\n\n📊 监控结果:")
-                print(ctx.current_monitor.get_summary())
+                d.info("Monitor stopped")
+                d.plain(ctx.current_monitor.get_summary())
         else:
-            print(f"❌ 启动监控失败")
+            d.error("Failed to start monitor")
 
     def _cmd_code_review(self, ctx: CLIContext, args: list[str]) -> None:
-        """Run code review on workspace."""
-        print("\n🔍 代码审查中...")
+        d = _get_display()
+        d.info("Running code review...")
         try:
             from skills import CodeReviewSkill, SkillContext
             skill = CodeReviewSkill()
@@ -313,16 +370,17 @@ class CommandRegistry:
                 model=ctx.current_model,
                 provider=ctx.current_provider,
             )
-            result = skill.execute(skill_ctx, " ".join(args))
-            print(result)
+            with d.spinner("Reviewing code..."):
+                result = skill.execute(skill_ctx, " ".join(args))
+            d.stream_text(result)
         except ImportError:
-            print("❌ Skills 模块未安装")
+            d.error("Skills module not installed")
         except Exception as e:
-            print(f"❌ 代码审查失败: {e}")
+            d.error(f"Code review failed: {e}")
 
     def _cmd_security_review(self, ctx: CLIContext, args: list[str]) -> None:
-        """Run security review on workspace."""
-        print("\n🔒 安全审查中...")
+        d = _get_display()
+        d.info("Running security review...")
         try:
             from skills import SecurityReviewSkill, SkillContext
             skill = SecurityReviewSkill()
@@ -331,16 +389,17 @@ class CommandRegistry:
                 model=ctx.current_model,
                 provider=ctx.current_provider,
             )
-            result = skill.execute(skill_ctx, " ".join(args))
-            print(result)
+            with d.spinner("Scanning..."):
+                result = skill.execute(skill_ctx, " ".join(args))
+            d.stream_text(result)
         except ImportError:
-            print("❌ Skills 模块未安装")
+            d.error("Skills module not installed")
         except Exception as e:
-            print(f"❌ 安全审查失败: {e}")
+            d.error(f"Security review failed: {e}")
 
     def _cmd_simplify(self, ctx: CLIContext, args: list[str]) -> None:
-        """Simplify code in workspace."""
-        print("\n🔧 代码简化中...")
+        d = _get_display()
+        d.info("Simplifying code...")
         try:
             from skills import SimplifySkill, SkillContext
             skill = SimplifySkill()
@@ -349,16 +408,17 @@ class CommandRegistry:
                 model=ctx.current_model,
                 provider=ctx.current_provider,
             )
-            result = skill.execute(skill_ctx, " ".join(args))
-            print(result)
+            with d.spinner("Analyzing..."):
+                result = skill.execute(skill_ctx, " ".join(args))
+            d.stream_text(result)
         except ImportError:
-            print("❌ Skills 模块未安装")
+            d.error("Skills module not installed")
         except Exception as e:
-            print(f"❌ 代码简化失败: {e}")
+            d.error(f"Simplification failed: {e}")
 
     def _cmd_init(self, ctx: CLIContext, args: list[str]) -> None:
-        """Initialize CLAUDE.md."""
-        print("\n📝 初始化项目文档...")
+        d = _get_display()
+        d.info("Initializing CLAUDE.md...")
         try:
             from skills import InitSkill, SkillContext
             skill = InitSkill()
@@ -367,35 +427,35 @@ class CommandRegistry:
                 model=ctx.current_model,
                 provider=ctx.current_provider,
             )
-            result = skill.execute(skill_ctx, " ".join(args))
-            print(result)
+            with d.spinner("Generating..."):
+                result = skill.execute(skill_ctx, " ".join(args))
+            d.stream_text(result)
         except ImportError:
-            print("❌ Skills 模块未安装")
+            d.error("Skills module not installed")
         except Exception as e:
-            print(f"❌ 初始化失败: {e}")
+            d.error(f"Init failed: {e}")
 
     def _cmd_external_memory(self, ctx: CLIContext, args: list[str]) -> None:
-        """External memory mode management."""
-        # 延迟加载避免循环依赖
+        d = _get_display()
         from agent.external_memory_integration import create_external_memory_manager
 
         if ctx.external_memory_manager is None:
             ctx.external_memory_manager = create_external_memory_manager(str(ctx.workspace))
 
         result = ctx.external_memory_manager.handle_command(args)
-        print(result)
+        d.plain(result)
 
     def _cmd_memory_status(self, ctx: CLIContext, args: list[str]) -> None:
-        """Display memory status."""
+        d = _get_display()
         from memory.state_manager import StateManager
 
         state_manager = StateManager(
             state_dir=str(ctx.workspace / "memory"),
-            session_logs_dir=str(ctx.workspace / "memory" / "session_logs")
+            session_logs_dir=str(ctx.workspace / "memory" / "session_logs"),
         )
 
         if not args or args[0] == "summary":
-            print("\n" + state_manager.get_summary())
+            d.plain(state_manager.get_summary())
             return
 
         subcommand = args[0].lower()
@@ -403,24 +463,48 @@ class CommandRegistry:
         if subcommand == "features":
             features = state_manager.get_features()
             if not features:
-                print("没有已记录的功能")
+                d.info("No features recorded")
                 return
-            print("\n## 功能清单\n")
             for f in features:
                 progress = state_manager.get_feature_progress(f["id"])
-                print(f"- [{f['status']}] {f['name']} (任务: {progress['completed']}/{progress['total']})")
-            print()
+                d.plain(f"  [{f['status']}] {f['name']} (tasks: {progress['completed']}/{progress['total']})")
         elif subcommand == "sessions":
             sessions = state_manager.get_recent_sessions(limit=5)
             if not sessions:
-                print("没有最近的会话")
+                d.info("No recent sessions")
                 return
-            print("\n## 最近会话\n")
             for s in sessions:
                 started = s.get("started_at", "")[:16]
                 ended = s.get("ended_at", "")
-                status = "进行中" if not ended else "已结束"
-                print(f"- [{status}] {s.get('task_name', 'Unknown')} ({started})")
-            print()
+                status = "active" if not ended else "done"
+                d.plain(f"  [{status}] {s.get('task_name', 'Unknown')} ({started})")
         else:
-            print(state_manager.get_summary())
+            d.plain(state_manager.get_summary())
+
+    def _cmd_cost(self, ctx: CLIContext, args: list[str]) -> None:
+        """Show API cost report."""
+        d = _get_display()
+        try:
+            from utils.cost_tracker import get_global_tracker
+            tracker = get_global_tracker()
+            report = tracker.get_report()
+            d.plain(report)
+        except Exception as e:
+            d.error(f"Cost tracker not available: {e}")
+
+    def _cmd_cache(self, ctx: CLIContext, args: list[str]) -> None:
+        """Show LLM cache stats."""
+        d = _get_display()
+        try:
+            from utils.llm_cache import get_global_cache
+            cache = get_global_cache()
+            stats = cache.stats
+            d.status_panel({
+                "Total requests": stats.total_requests,
+                "Cache hits": stats.cache_hits,
+                "Cache misses": stats.cache_misses,
+                "Hit rate": f"{stats.hit_rate * 100:.1f}%",
+                "Entries": len(cache._cache),
+            })
+        except Exception as e:
+            d.error(f"Cache not available: {e}")

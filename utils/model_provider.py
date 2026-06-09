@@ -9,6 +9,7 @@
 
 import os
 from abc import ABC, abstractmethod
+from collections.abc import Generator
 from dataclasses import dataclass
 from typing import Any
 
@@ -32,6 +33,13 @@ class BaseModelProvider(ABC):
     def chat(self, prompt: str, **kwargs) -> str:
         """Send a chat request."""
         pass
+
+    def chat_stream(self, prompt: str, **kwargs) -> Generator[str, None, None]:
+        """Send a chat request with streaming. Override in subclasses for native streaming.
+
+        Default: calls chat() and yields the full response as one chunk.
+        """
+        yield self.chat(prompt, **kwargs)
 
     @abstractmethod
     def list_models(self) -> list[ModelInfo]:
@@ -91,6 +99,25 @@ class OllamaProvider(BaseModelProvider):
 
         response = self.client.chat(**kwargs)
         return response["message"]["content"]
+
+    def chat_stream(self, prompt: str, **kwargs) -> Generator[str, None, None]:
+        """Stream chat response from Ollama."""
+        messages = [{"role": "user", "content": prompt}]
+
+        kwargs.setdefault("model", self.model)
+        kwargs.setdefault("messages", messages)
+
+        if "options" not in kwargs:
+            kwargs["options"] = {
+                "temperature": kwargs.pop("temperature", 0.1),
+            }
+
+        kwargs["stream"] = True
+
+        for chunk in self.client.chat(**kwargs):
+            content = chunk.get("message", {}).get("content", "")
+            if content:
+                yield content
 
     def list_models(self) -> list[ModelInfo]:
         """List installed Ollama models."""
@@ -152,6 +179,20 @@ class OpenAIProvider(BaseModelProvider):
         response = self.client.chat.completions.create(**kwargs)
         return response.choices[0].message.content or "{}"
 
+    def chat_stream(self, prompt: str, **kwargs) -> Generator[str, None, None]:
+        """Stream chat response from OpenAI."""
+        messages = [{"role": "user", "content": prompt}]
+
+        kwargs.setdefault("model", self.model)
+        kwargs.setdefault("messages", messages)
+        kwargs.pop("response_format", None)  # streaming doesn't support json_object
+
+        stream = self.client.chat.completions.create(stream=True, **kwargs)
+        for chunk in stream:
+            delta = chunk.choices[0].delta if chunk.choices else None
+            if delta and delta.content:
+                yield delta.content
+
     def list_models(self) -> list[ModelInfo]:
         """List available OpenAI models (returns common models)."""
         return [
@@ -185,6 +226,16 @@ class AnthropicProvider(BaseModelProvider):
 
         response = self.client.messages.create(**kwargs)
         return response.content[0].text
+
+    def chat_stream(self, prompt: str, **kwargs) -> Generator[str, None, None]:
+        """Stream chat response from Anthropic."""
+        kwargs.setdefault("model", self.model)
+        kwargs.setdefault("messages", [{"role": "user", "content": prompt}])
+        kwargs.setdefault("max_tokens", 1024)
+
+        with self.client.messages.stream(**kwargs) as stream:
+            for text in stream.text_stream:
+                yield text
 
     def list_models(self) -> list[ModelInfo]:
         """List available Anthropic models."""
@@ -220,6 +271,19 @@ class DeepSeekProvider(BaseModelProvider):
 
         response = self.client.chat.completions.create(**kwargs)
         return response.choices[0].message.content or ""
+
+    def chat_stream(self, prompt: str, **kwargs) -> Generator[str, None, None]:
+        """Stream chat response from DeepSeek."""
+        messages = [{"role": "user", "content": prompt}]
+
+        kwargs.setdefault("model", self.model)
+        kwargs.setdefault("messages", messages)
+
+        stream = self.client.chat.completions.create(stream=True, **kwargs)
+        for chunk in stream:
+            delta = chunk.choices[0].delta if chunk.choices else None
+            if delta and delta.content:
+                yield delta.content
 
     def list_models(self) -> list[ModelInfo]:
         """List available DeepSeek models."""
@@ -364,6 +428,10 @@ class ModelManager:
         # Use anywhere
         response = manager.chat("Hello!")
 
+        # Streaming
+        for chunk in manager.chat_stream("Hello!"):
+            print(chunk, end="", flush=True)
+
         # List available models
         models = manager.list_available_models()
     """
@@ -383,7 +451,27 @@ class ModelManager:
         self.current_model = default_model or os.getenv("MODEL_NAME", "gemma4:latest")
         self.base_url = base_url
         self._provider: BaseModelProvider | None = None
+
+        # Optional integrations
+        self._cache = None
+        self._cost_tracker = None
+
         self._init_provider()
+        self._init_integrations()
+
+    def _init_integrations(self) -> None:
+        """Initialize optional cache and cost tracker."""
+        try:
+            from utils.llm_cache import LLMCache
+            self._cache = LLMCache()
+        except Exception:
+            pass
+
+        try:
+            from utils.cost_tracker import CostTracker
+            self._cost_tracker = CostTracker()
+        except Exception:
+            pass
 
     def _init_provider(self) -> None:
         """Initialize the current provider."""
@@ -470,6 +558,47 @@ class ModelManager:
 
         timeout = kwargs.pop("timeout", 30)
 
+        # Check cache
+        if self._cache:
+            cached = self._cache.get(prompt, self.current_model, self.current_provider)
+            if cached is not None:
+                return cached
+
+        import time
+        start = time.time()
+        response = self._call_provider(prompt, timeout=timeout, **kwargs)
+        latency_ms = (time.time() - start) * 1000
+
+        # Record cost
+        if self._cost_tracker:
+            input_tokens = len(prompt.split()) * 1.3  # rough estimate
+            output_tokens = len(response.split()) * 1.3
+            try:
+                self._cost_tracker.record_call(
+                    provider=self.current_provider,
+                    model=self.current_model,
+                    input_tokens=int(input_tokens),
+                    output_tokens=int(output_tokens),
+                    latency_ms=latency_ms,
+                )
+            except Exception:
+                pass
+
+        # Store in cache
+        if self._cache:
+            try:
+                self._cache.set(prompt, response, self.current_model, self.current_provider, latency_ms)
+            except Exception:
+                pass
+
+        return response
+
+    def _call_provider(self, prompt: str, timeout: int = 30, **kwargs) -> str:
+        """Internal: call the provider with timeout handling."""
+        # Strip 'schema' kwarg — it's an internal hint, not a provider API param.
+        # OpenAI-compatible providers already default to response_format=json_object.
+        kwargs.pop("schema", None)
+
         if isinstance(self._provider, OllamaProvider):
             original_timeout = self._provider.timeout
             self._provider.timeout = timeout
@@ -479,6 +608,33 @@ class ModelManager:
                 self._provider.timeout = original_timeout
 
         return self._provider.chat(prompt, **kwargs)
+
+    def chat_stream(self, prompt: str, **kwargs) -> Generator[str, None, None]:
+        """
+        Stream chat response from the current model.
+
+        Args:
+            prompt: The prompt to send
+            timeout: Request timeout in seconds (default 30)
+            **kwargs: Additional parameters
+
+        Yields:
+            Response chunks as strings
+        """
+        if self._provider is None:
+            self._init_provider()
+
+        timeout = kwargs.pop("timeout", 30)
+
+        if isinstance(self._provider, OllamaProvider):
+            original_timeout = self._provider.timeout
+            self._provider.timeout = timeout
+            try:
+                yield from self._provider.chat_stream(prompt, **kwargs)
+            finally:
+                self._provider.timeout = original_timeout
+        else:
+            yield from self._provider.chat_stream(prompt, **kwargs)
 
     def list_available_models(self) -> list[ModelInfo]:
         """

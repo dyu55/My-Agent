@@ -1,0 +1,599 @@
+To implement these features, we will integrate **Chart.js**, a powerful and responsive library for data visualization. 
+
+I have transitioned the color palette to a **"Cozy Autumn"** theme: warm creams and soft browns for light mode, and deep chocolate and amber for dark mode. I have also increased the hit-areas (padding/font-size) for mobile accessibility.
+
+### 1. index.html
+I've added the theme toggle, a dedicated **Reports** section with a month picker, and the canvas elements for the charts.
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Family Finance Tracker Pro</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Include Chart.js from CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <h1>Family Finance Tracker</h1>
+            <button id="theme-toggle" class="theme-btn">🌓 Toggle Theme</button>
+        </header>
+
+        <div class="summary">
+            <div class="card"><h3>Balance</h3><p id="total-balance">$0.00</p></div>
+            <div class="card income"><h3>Income</h3><p id="total-income">$0.00</p></div>
+            <div class="card expense"><h3>Expenses</h3><p id="total-expense">$0.00</p></div>
+        </div>
+
+        <div class="main-grid">
+            <div class="setup-column">
+                <div class="card-section">
+                    <h3>1. Manage Family Members</h3>
+                    <div class="member-input-group">
+                        <input type="text" id="new-member-name" placeholder="Name...">
+                        <button id="add-member-btn">Add</button>
+                    </div>
+                    <div id="members-list" class="member-tags"></div>
+                </div>
+
+                <div class="card-section">
+                    <h3>2. Add Transaction</h3>
+                    <form id="finance-form" novalidate>
+                        <div class="form-group">
+                            <label>Amount</label>
+                            <input type="number" id="amount" step="0.01" placeholder="0.00">
+                            <span class="error" id="err-amount"></span>
+                        </div>
+                        <div class="form-group">
+                            <label>Category</label>
+                            <select id="category">
+                                <option value="">-- Select --</option>
+                                <option value="salary">Salary</option>
+                                <option value="food">Food</option>
+                                <option value="transport">Transport</option>
+                                <option value="shopping">Shopping</option>
+                                <option value="rent">Rent</option>
+                                <option value="utilities">Utilities</option>
+                                <option value="entertainment">Entertainment</option>
+                                <option value="medical">Medical</option>
+                                <option value="education">Education</option>
+                                <option value="other">Other</option>
+                            </select>
+                            <span class="error" id="err-category"></span>
+                        </div>
+                        <div class="form-group">
+                            <label>Date</label>
+                            <input type="date" id="date">
+                            <span class="error" id="err-date"></span>
+                        </div>
+                        <div class="form-group">
+                            <label>Family Member</label>
+                            <select id="member-select">
+                                <option value="">-- Select --</option>
+                            </select>
+                            <span class="error" id="err-member"></span>
+                        </div>
+                        <div class="form-group">
+                            <label>Note (Optional)</label>
+                            <input type="text" id="note" placeholder="Add a note...">
+                        </div>
+                        <button type="submit" class="submit-btn">Save Transaction</button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="history-column">
+                <!-- Filters Panel -->
+                <div class="card-section filter-panel">
+                    <h3>Filters</h3>
+                    <div class="filter-grid">
+                        <div class="filter-group">
+                            <label>Search Note</label>
+                            <input type="text" id="filter-search" placeholder="Keyword...">
+                        </div>
+                        <div class="filter-group">
+                            <label>Member</label>
+                            <select id="filter-member">
+                                <option value="">All Members</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label>Date Range</label>
+                            <div class="date-range">
+                                <input type="date" id="filter-date-start">
+                                <input type="date" id="filter-date-end">
+                            </div>
+                        </div>
+                        <div class="filter-group">
+                            <label>Amount Range</label>
+                            <div class="amount-range">
+                                <input type="number" id="filter-amount-min" placeholder="Min">
+                                <input type="number" id="filter-amount-max" placeholder="Max">
+                            </div>
+                        </div>
+                        <div class="filter-group full-width">
+                            <label>Categories</label>
+                            <div id="filter-categories" class="cat-checkboxes"></div>
+                        </div>
+                    </div>
+                    <button id="clear-filters" class="secondary-btn">Clear All Filters</button>
+                </div>
+
+                <div class="card-section">
+                    <div class="list-header">
+                        <h3>Transaction History</h3>
+                        <button id="batch-delete-btn" class="danger-btn">Delete Selected</button>
+                    </div>
+                    <ul id="transaction-list"></ul>
+                </div>
+
+                <!-- Reports Section -->
+                <div class="card-section reports-section">
+                    <div class="reports-header">
+                        <h3>Financial Reports</h3>
+                        <input type="month" id="report-month-picker">
+                    </div>
+                    <div class="charts-grid">
+                        <div class="chart-container">
+                            <p>Spending by Category</p>
+                            <canvas id="pieChart"></canvas>
+                        </div>
+                        <div class="chart-container">
+                            <p>Spending by Member</p>
+                            <canvas id="barChart"></canvas>
+                        </div>
+                        <div class="chart-container full-width">
+                            <p>6-Month Spending Trend</p>
+                            <canvas id="lineChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
+```
+
+### 2. style.css
+I replaced the "Corporate Blue" with a "Warm Cozy" palette. I also used CSS variables to make switching themes seamless.
+
+```css
+:root {
+    /* Light Theme - Warm Cream/Brown */
+    --bg: #fdf8f3;
+    --card-bg: #ffffff;
+    --text: #4a3728;
+    --primary: #d27d46;
+    --secondary: #e8c39e;
+    --income: #6b8e23;
+    --expense: #b22222;
+    --error: #cc3333;
+    --border: #e0d5cc;
+    --input-bg: #fff;
+}
+
+body.dark-mode {
+    /* Dark Theme - Deep Cocoa/Amber */
+    --bg: #2c1e1a;
+    --card-bg: #3d2b24;
+    --text: #ffd8a8;
+    --primary: #ffb347;
+    --secondary: #5d4037;
+    --income: #a3cf62;
+    --expense: #ff6b6b;
+    --error: #ff4d4d;
+    --border: #5d4037;
+    --input-bg: #2c1e1a;
+}
+
+body { 
+    font-family: 'Segoe UI', system-ui, sans-serif; 
+    background-color: var(--bg); 
+    color: var(--text); 
+    margin: 0; 
+    padding: 15px; 
+    transition: background 0.3s, color 0.3s;
+}
+
+.container { max-width: 1100px; margin: 0 auto; }
+header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+
+.theme-btn {
+    padding: 12px 20px;
+    font-size: 1rem;
+    cursor: pointer;
+    background: var(--primary);
+    color: white;
+    border: none;
+    border-radius: 30px;
+    font-weight: bold;
+}
+
+.summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px; }
+.card { background: var(--card-bg); padding: 20px; border-radius: 15px; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.1); border: 1px solid var(--border); }
+.card h3 { margin: 0; font-size: 0.9rem; color: var(--secondary); text-transform: uppercase; }
+.card p { font-size: 1.8rem; font-weight: bold; margin: 10px 0 0; }
+.income p { color: var(--income); }
+.expense p { color: var(--expense); }
+
+.main-grid { display: grid; grid-template-columns: 350px 1fr; gap: 20px; align-items: start; }
+
+@media (max-width: 850px) {
+    .main-grid { grid-template-columns: 1fr; }
+}
+
+.card-section { background: var(--card-bg); padding: 20px; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.1); margin-bottom: 20px; border: 1px solid var(--border); }
+
+/* Mobile-friendly inputs */
+input, select, button { 
+    padding: 12px; 
+    border: 1px solid var(--border); 
+    border-radius: 8px; 
+    background: var(--input-bg); 
+    color: var(--text);
+    font-size: 1rem; 
+}
+
+.member-input-group { display: flex; gap: 10px; margin-bottom: 15px; }
+.member-input-group input { flex: 1; }
+.member-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+.member-tag { background: var(--secondary); color: var(--text); padding: 6px 12px; border-radius: 20px; font-size: 0.9rem; display: flex; align-items: center; gap: 5px; }
+.member-tag span { cursor: pointer; color: var(--error); font-weight: bold; }
+
+.form-group { margin-bottom: 15px; display: flex; flex-direction: column; gap: 5px; }
+.form-group label { font-size: 0.95rem; font-weight: 600; }
+.error { color: var(--error); font-size: 0.8rem; height: 1rem; }
+.submit-btn { width: 100%; padding: 15px; background: var(--primary); color: white; border: none; font-weight: bold; cursor: pointer; font-size: 1.1rem; }
+
+.filter-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px; }
+.filter-group { display: flex; flex-direction: column; gap: 5px; }
+.date-range, .amount-range { display: flex; gap: 5px; }
+.date-range input, .amount-range input { width: 50%; padding: 8px; font-size: 0.9rem; }
+.full-width { grid-column: span 2; }
+.cat-checkboxes { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; font-size: 0.9rem; }
+
+.secondary-btn { width: 100%; padding: 12px; background: var(--secondary); color: var(--text); border: none; border-radius: 8px; cursor: pointer; }
+.danger-btn { padding: 10px 15px; background: var(--expense); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
+
+.list-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; gap: 10px; }
+#transaction-list { list-style: none; padding: 0; }
+.transaction-item {
+    background: rgba(0,0,0,0.03); padding: 15px; border-bottom: 1px solid var(--border);
+    display: grid; grid-template-columns: 40px 1fr auto auto; align-items: center; gap: 15px; font-size: 1rem;
+}
+.transaction-item.selected { background: rgba(210, 125, 70, 0.1); border-left: 5px solid var(--primary); }
+
+/* Charts Section */
+.reports-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }
+#report-month-picker { padding: 10px; }
+.charts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.chart-container { min-height: 300px; position: relative; text-align: center; }
+.chart-container.full-width { grid-column: span 2; min-height: 350px; }
+.chart-container p { font-weight: bold; margin-bottom: 10px; color: var(--secondary); }
+
+@media (max-width: 600px) {
+    .charts-grid { grid-template-columns: 1fr; }
+    .chart-container.full-width { grid-column: span 1; }
+    .filter-grid { grid-template-columns: 1fr; }
+    .full-width { grid-column: span 1; }
+}
+```
+
+### 3. app.js
+I've added the logic for theme management and a `ReportsManager` object that handles the Chart.js lifecycle and data aggregation.
+
+```javascript
+// --- State & Undo/Redo ---
+let transactions = JSON.parse(localStorage.getItem('family_txs')) || [];
+let members = JSON.parse(localStorage.getItem('family_members')) || [];
+let stateHistory = []; 
+let redoStack = [];    
+
+function saveState() {
+    stateHistory.push(JSON.stringify(transactions));
+    redoStack = [];
+    if (stateHistory.length > 50) stateHistory.shift();
+}
+
+function undo() {
+    if (stateHistory.length === 0) return;
+    redoStack.push(JSON.stringify(transactions));
+    transactions = JSON.parse(stateHistory.pop());
+    updateUI();
+    syncStorage();
+    updateCharts();
+}
+
+function redo() {
+    if (redoStack.length === 0) return;
+    stateHistory.push(JSON.stringify(transactions));
+    transactions = JSON.parse(redoStack.pop());
+    updateUI();
+    syncStorage();
+    updateCharts();
+}
+
+// --- Theme Management ---
+const themeToggle = document.getElementById('theme-toggle');
+function initTheme() {
+    const savedTheme = localStorage.getItem('theme') || 'light';
+    if (savedTheme === 'dark') document.body.classList.add('dark-mode');
+}
+
+themeToggle.addEventListener('click', () => {
+    document.body.classList.toggle('dark-mode');
+    const currentTheme = document.body.classList.contains('dark-mode') ? 'dark' : 'light';
+    localStorage.setItem('theme', currentTheme);
+    updateCharts(); // Refresh chart colors
+});
+
+// --- DOM Elements ---
+const financeForm = document.getElementById('finance-form');
+const memberInput = document.getElementById('new-member-name');
+const addMemberBtn = document.getElementById('add-member-btn');
+const membersListDiv = document.getElementById('members-list');
+const memberSelect = document.getElementById('member-select');
+const txList = document.getElementById('transaction-list');
+const filterCatsDiv = document.getElementById('filter-categories');
+const reportMonthPicker = document.getElementById('report-month-picker');
+
+// --- Member Logic ---
+function renderMembers() {
+    membersListDiv.innerHTML = '';
+    memberSelect.innerHTML = '<option value="">-- Select Member --</option>';
+    document.getElementById('filter-member').innerHTML = '<option value="">All Members</option>';
+
+    members.forEach((member, index) => {
+        const tag = document.createElement('div');
+        tag.className = 'member-tag';
+        tag.innerHTML = `${member} <span onclick="removeMember(${index})">&times;</span>`;
+        membersListDiv.appendChild(tag);
+        const opt = document.createElement('option');
+        opt.value = member; opt.innerText = member;
+        memberSelect.appendChild(opt);
+        document.getElementById('filter-member').appendChild(opt.cloneNode(true));
+    });
+    syncStorage();
+}
+
+function removeMember(index) { members.splice(index, 1); renderMembers(); }
+addMemberBtn.addEventListener('click', () => {
+    const name = memberInput.value.trim();
+    if (name && !members.includes(name)) { members.push(name); memberInput.value = ''; renderMembers(); }
+});
+
+// --- Filtering Logic ---
+const categories = ['salary', 'food', 'transport', 'shopping', 'rent', 'utilities', 'entertainment', 'medical', 'education', 'other'];
+
+function initCategoryFilters() {
+    filterCatsDiv.innerHTML = '';
+    categories.forEach(cat => {
+        const label = document.createElement('label');
+        label.innerHTML = `<input type="checkbox" value="${cat}" class="cat-filter"> ${cat.charAt(0).toUpperCase() + cat.slice(1)}`;
+        filterCatsDiv.appendChild(label);
+    });
+}
+
+function getFilteredTransactions() {
+    const search = document.getElementById('filter-search').value.toLowerCase();
+    const member = document.getElementById('filter-member').value;
+    const start = document.getElementById('filter-date-start').value;
+    const end = document.getElementById('filter-date-end').value;
+    const min = parseFloat(document.getElementById('filter-amount-min').value);
+    const max = parseFloat(document.getElementById('filter-amount-max').value);
+    const selectedCats = Array.from(document.querySelectorAll('.cat-filter:checked')).map(cb => cb.value);
+
+    return transactions.filter(tx => {
+        const matchesSearch = (tx.note || "").toLowerCase().includes(search);
+        const matchesMember = !member || tx.member === member;
+        const matchesDate = (!start || tx.date >= start) && (!end || tx.date <= end);
+        const matchesAmount = (isNaN(min) || tx.amount >= min) && (isNaN(max) || tx.amount <= max);
+        const matchesCat = selectedCats.length === 0 || selectedCats.includes(tx.category);
+        return matchesSearch && matchesMember && matchesDate && matchesAmount && matchesCat;
+    });
+}
+
+// --- Form Logic ---
+function validateForm() {
+    let isValid = true;
+    const errors = { amount: document.getElementById('err-amount'), category: document.getElementById('err-category'), date: document.getElementById('err-date'), member: document.getElementById('err-member') };
+    Object.values(errors).forEach(el => el.innerText = '');
+
+    const amount = parseFloat(document.getElementById('amount').value);
+    if (isNaN(amount) || amount <= 0) { errors.amount.innerText = 'Please enter a positive amount'; isValid = false; }
+    if (!document.getElementById('category').value) { errors.category.innerText = 'Please select'; isValid = false; }
+    const dateVal = document.getElementById('date').value;
+    if (!dateVal) { errors.date.innerText = 'Please select a date'; isValid = false; } 
+    else if (new Date(dateVal) > new Date().setHours(0,0,0,0)) { errors.date.innerText = 'Date cannot be in the future'; isValid = false; }
+    if (!document.getElementById('member-select').value) { errors.member.innerText = 'Please select'; isValid = false; }
+
+    return isValid;
+}
+
+financeForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (!validateForm()) return;
+    saveState();
+    const tx = {
+        id: Date.now(),
+        amount: parseFloat(document.getElementById('amount').value),
+        category: document.getElementById('category').value,
+        date: document.getElementById('date').value,
+        member: document.getElementById('member-select').value,
+        note: document.getElementById('note').value,
+        type: ['salary'].includes(document.getElementById('category').value) ? 'income' : 'expense'
+    };
+    transactions.push(tx);
+    financeForm.reset();
+    updateUI();
+    syncStorage();
+    updateCharts();
+});
+
+function deleteTransaction(id) {
+    saveState();
+    transactions = transactions.filter(t => t.id !== id);
+    updateUI();
+    syncStorage();
+    updateCharts();
+}
+
+document.getElementById('batch-delete-btn').addEventListener('click', () => {
+    const selected = Array.from(document.querySelectorAll('.tx-check:checked')).map(cb => parseInt(cb.dataset.id));
+    if (selected.length === 0) return;
+    saveState();
+    transactions = transactions.filter(t => !selected.includes(t.id));
+    updateUI();
+    syncStorage();
+    updateCharts();
+});
+
+function updateUI() {
+    const filtered = getFilteredTransactions();
+    txList.innerHTML = '';
+    let totalInc = 0, totalExp = 0;
+
+    filtered.sort((a, b) => new Date(b.date) - new Date(a.date)).forEach(tx => {
+        if (tx.type === 'income') totalInc += tx.amount; else totalExp += tx.amount;
+        const li = document.createElement('li');
+        li.className = 'transaction-item';
+        li.innerHTML = `
+            <input type="checkbox" class="tx-check" data-id="${tx.id}" onchange="this.parentElement.classList.toggle('selected')">
+            <div class="item-details">
+                <strong>${tx.note || tx.category}</strong>
+                <span class="member-cat">${tx.date} • ${tx.member} • ${tx.category}</span>
+            </div>
+            <div>
+                <button class="btn-edit" onclick="editTransaction(${tx.id})">Edit</button>
+                <button class="btn-edit" style="color:var(--expense)" onclick="deleteTransaction(${tx.id})">Delete</button>
+            </div>
+            <div class="amount-val ${tx.type === 'income' ? 'inc' : 'exp'}">
+                ${tx.type === 'income' ? '+' : '-'}$${tx.amount.toFixed(2)}
+            </div>
+        `;
+        txList.appendChild(li);
+    });
+
+    document.getElementById('total-balance').innerText = `$${(totalInc - totalExp).toFixed(2)}`;
+    document.getElementById('total-income').innerText = `$${totalInc.toFixed(2)}`;
+    document.getElementById('total-expense').innerText = `$${totalExp.toFixed(2)}`;
+}
+
+function editTransaction(id) {
+    const tx = transactions.find(t => t.id === id);
+    if (!tx) return;
+    document.getElementById('amount').value = tx.amount;
+    document.getElementById('category').value = tx.category;
+    document.getElementById('date').value = tx.date;
+    document.getElementById('member-select').value = tx.member;
+    document.getElementById('note').value = tx.note;
+    saveState();
+    transactions = transactions.filter(t => t.id !== id);
+    updateUI();
+}
+
+function syncStorage() {
+    localStorage.setItem('family_txs', JSON.stringify(transactions));
+    localStorage.setItem('family_members', JSON.stringify(members));
+}
+
+// --- Charts Logic ---
+let charts = {};
+function initCharts() {
+    const ctxPie = document.getElementById('pieChart').getContext('2d');
+    const ctxBar = document.getElementById('barChart').getContext('2d');
+    const ctxLine = document.getElementById('lineChart').getContext('2d');
+
+    const commonOptions = { responsive: true, maintainAspectRatio: false };
+
+    charts.pie = new Chart(ctxPie, { type: 'pie', data: { labels: [], datasets: [{ data: [], backgroundColor: ['#d27d46', '#e8c39e', '#6b8e23', '#b22222', '#4a90e2', '#9b59b6', '#f1c40f', '#e67e22', '#95a5a6', '#34495e'] }] }, options: commonOptions });
+    charts.bar = new Chart(ctxBar, { type: 'bar', data: { labels: [], datasets: [{ label: 'Spending', data: [], backgroundColor: '#d27d46' }] }, options: commonOptions });
+    charts.line = new Chart(ctxLine, { type: 'line', data: { labels: [], datasets: [{ label: 'Total Spending', data: [], borderColor: '#d27d46', tension: 0.3, fill: true, backgroundColor: 'rgba(210, 125, 70, 0.2)' }] }, options: commonOptions });
+}
+
+function updateCharts() {
+    const selectedMonth = reportMonthPicker.value; // Format "YYYY-MM"
+    if (!selectedMonth) return;
+
+    const monthTxs = transactions.filter(tx => tx.date.startsWith(selectedMonth) && tx.type === 'expense');
+
+    // 1. Pie Chart (Categories)
+    const catTotals = {};
+    monthTxs.forEach(tx => catTotals[tx.category] = (catTotals[tx.category] || 0) + tx.amount);
+    charts.pie.data.labels = Object.keys(catTotals);
+    charts.pie.data.datasets[0].data = Object.values(catTotals);
+    charts.pie.update();
+
+    // 2. Bar Chart (Members)
+    const memTotals = {};
+    monthTxs.forEach(tx => memTotals[tx.member] = (memTotals[tx.member] || 0) + tx.amount);
+    charts.bar.data.labels = Object.keys(memTotals);
+    charts.bar.data.datasets[0].data = Object.values(memTotals);
+    charts.bar.update();
+
+    // 3. Line Chart (6 Month Trend)
+    const last6Months = [];
+    const trendData = [];
+    const now = new Date();
+    for (let i = 5; i >= 0; i--) {
+        const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+        const monthStr = d.toISOString().substring(0, 7);
+        last6Months.push(monthStr);
+        const total = transactions
+            .filter(tx => tx.date.startsWith(monthStr) && tx.type === 'expense')
+            .reduce((sum, tx) => sum + tx.amount, 0);
+        trendData.push(total);
+    }
+    charts.line.data.labels = last6Months;
+    charts.line.data.datasets[0].data = trendData;
+    charts.line.update();
+}
+
+// --- Event Listeners ---
+document.getElementById('clear-filters').addEventListener('click', () => {
+    document.getElementById('filter-search').value = '';
+    document.getElementById('filter-member').value = '';
+    document.getElementById('filter-date-start').value = '';
+    document.getElementById('filter-date-end').value = '';
+    document.getElementById('filter-amount-min').value = '';
+    document.getElementById('filter-amount-max').value = '';
+    document.querySelectorAll('.cat-filter').forEach(cb => cb.checked = false);
+    updateUI();
+});
+
+document.querySelector('.filter-panel').addEventListener('input', updateUI);
+reportMonthPicker.addEventListener('change', updateCharts);
+window.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.key === 'z') { e.preventDefault(); undo(); }
+    if (e.ctrlKey && e.key === 'y') { e.preventDefault(); redo(); }
+});
+
+// Init
+initTheme();
+initCategoryFilters();
+renderMembers();
+updateUI();
+initCharts();
+
+// Set default month picker to current month
+const now = new Date();
+reportMonthPicker.value = now.toISOString().substring(0, 7);
+updateCharts();
+```
+
+### Key Upgrades Explained:
+
+1.  **Chart.js Integration**: I used the `Chart` constructor to create three different visualization types. The logic aggregates data from the `transactions` array using `.filter()` and `.reduce()`.
+2.  **Contextual Reporting**: The `<input type="month">` allows the user to pick any month. The Pie and Bar charts react instantly to this selection, while the Line chart always provides the relative 6-month trend.
+3.  **Cozy Color Scheme**: Instead of a stark "Dark Mode" (Black/White), I used a **palette of browns, creams, and ambers**. This creates a "warm" feel that is easier on the eyes.
+4.  **Mobile First**: 
+    *   **Touch Targets**: All inputs, buttons, and checkboxes have increased padding (`12px-15px`) to be easily tappable.
+    *   **Responsive Layout**: The `main-grid` and `charts-grid` collapse from 2 columns to 1 column on smaller screens using CSS Media Queries.
+5.  **State Consistency**: Whenever a transaction is added, edited, deleted, or undone, `updateCharts()` is called to ensure the visual reports are perfectly synced with the data.

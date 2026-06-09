@@ -1,0 +1,458 @@
+This is a significant upgrade. To handle **Undo/Redo**, we will implement a **State Snapshot Pattern**. Instead of tracking individual changes, we save a snapshot of the entire transaction list before every mutating action. 
+
+For **Filtering**, we will implement a "Pipeline" approach where the data passes through a series of filters before being rendered to the UI.
+
+### 1. index.html
+I have added a comprehensive filter panel and a "Delete Selected" button for batch operations.
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Family Finance Tracker Pro</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div class="container">
+        <h1>Family Finance Tracker</h1>
+
+        <div class="summary">
+            <div class="card"><h3>Balance</h3><p id="total-balance">$0.00</p></div>
+            <div class="card income"><h3>Income</h3><p id="total-income">$0.00</p></div>
+            <div class="card expense"><h3>Expenses</h3><p id="total-expense">$0.00</p></div>
+        </div>
+
+        <div class="main-grid">
+            <div class="setup-column">
+                <div class="card-section">
+                    <h3>1. Manage Family Members</h3>
+                    <div class="member-input-group">
+                        <input type="text" id="new-member-name" placeholder="Name...">
+                        <button id="add-member-btn">Add</button>
+                    </div>
+                    <div id="members-list" class="member-tags"></div>
+                </div>
+
+                <div class="card-section">
+                    <h3>2. Add Transaction</h3>
+                    <form id="finance-form" novalidate>
+                        <div class="form-group">
+                            <label>Amount</label>
+                            <input type="number" id="amount" step="0.01" placeholder="0.00">
+                            <span class="error" id="err-amount"></span>
+                        </div>
+                        <div class="form-group">
+                            <label>Category</label>
+                            <select id="category">
+                                <option value="">-- Select --</option>
+                                <option value="salary">Salary</option>
+                                <option value="food">Food</option>
+                                <option value="transport">Transport</option>
+                                <option value="shopping">Shopping</option>
+                                <option value="rent">Rent</option>
+                                <option value="utilities">Utilities</option>
+                                <option value="entertainment">Entertainment</option>
+                                <option value="medical">Medical</option>
+                                <option value="education">Education</option>
+                                <option value="other">Other</option>
+                            </select>
+                            <span class="error" id="err-category"></span>
+                        </div>
+                        <div class="form-group">
+                            <label>Date</label>
+                            <input type="date" id="date">
+                            <span class="error" id="err-date"></span>
+                        </div>
+                        <div class="form-group">
+                            <label>Family Member</label>
+                            <select id="member-select">
+                                <option value="">-- Select --</option>
+                            </select>
+                            <span class="error" id="err-member"></span>
+                        </div>
+                        <div class="form-group">
+                            <label>Note (Optional)</label>
+                            <input type="text" id="note" placeholder="Add a note...">
+                        </div>
+                        <button type="submit" class="submit-btn">Save Transaction</button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="history-column">
+                <!-- Filters Panel -->
+                <div class="card-section filter-panel">
+                    <h3>Filters</h3>
+                    <div class="filter-grid">
+                        <div class="filter-group">
+                            <label>Search Note</label>
+                            <input type="text" id="filter-search" placeholder="Keyword...">
+                        </div>
+                        <div class="filter-group">
+                            <label>Member</label>
+                            <select id="filter-member">
+                                <option value="">All Members</option>
+                            </select>
+                        </div>
+                        <div class="filter-group">
+                            <label>Date Range</label>
+                            <div class="date-range">
+                                <input type="date" id="filter-date-start">
+                                <input type="date" id="filter-date-end">
+                            </div>
+                        </div>
+                        <div class="filter-group">
+                            <label>Amount Range</label>
+                            <div class="amount-range">
+                                <input type="number" id="filter-amount-min" placeholder="Min">
+                                <input type="number" id="filter-amount-max" placeholder="Max">
+                            </div>
+                        </div>
+                        <div class="filter-group full-width">
+                            <label>Categories</label>
+                            <div id="filter-categories" class="cat-checkboxes">
+                                <!-- Categories injected here -->
+                            </div>
+                        </div>
+                    </div>
+                    <button id="clear-filters" class="secondary-btn">Clear All Filters</button>
+                </div>
+
+                <div class="card-section">
+                    <div class="list-header">
+                        <h3>Transaction History</h3>
+                        <button id="batch-delete-btn" class="danger-btn">Delete Selected</button>
+                    </div>
+                    <ul id="transaction-list"></ul>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script src="app.js"></script>
+</body>
+</html>
+```
+
+### 2. style.css
+I've added styles for the filter grid and the "Selected" state for batch deletion.
+
+```css
+:root {
+    --primary: #4a90e2;
+    --income: #2ecc71;
+    --expense: #e74c3c;
+    --error: #ff4d4d;
+    --bg: #f0f2f5;
+    --text: #333;
+}
+
+body { font-family: 'Inter', system-ui, sans-serif; background-color: var(--bg); color: var(--text); margin: 0; padding: 20px; }
+.container { max-width: 1100px; margin: 0 auto; }
+h1 { text-align: center; color: var(--primary); }
+
+.summary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 30px; }
+.card { background: white; padding: 20px; border-radius: 12px; text-align: center; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+.card h3 { margin: 0; font-size: 0.8rem; color: #666; text-transform: uppercase; }
+.card p { font-size: 1.5rem; font-weight: bold; margin: 10px 0 0; }
+.income p { color: var(--income); }
+.expense p { color: var(--expense); }
+
+.main-grid { display: grid; grid-template-columns: 350px 1fr; gap: 20px; align-items: start; }
+.card-section { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); margin-bottom: 20px; }
+
+.member-input-group { display: flex; gap: 10px; margin-bottom: 15px; }
+.member-input-group input { flex: 1; padding: 8px; }
+.member-tags { display: flex; flex-wrap: wrap; gap: 8px; }
+.member-tag { background: #e0e0e0; padding: 5px 10px; border-radius: 20px; font-size: 0.85rem; display: flex; align-items: center; gap: 5px; }
+.member-tag span { cursor: pointer; color: var(--error); font-weight: bold; }
+
+.form-group { margin-bottom: 15px; display: flex; flex-direction: column; }
+.form-group label { font-size: 0.9rem; font-weight: 600; margin-bottom: 5px; }
+input, select { padding: 10px; border: 1px solid #ddd; border-radius: 6px; }
+.error { color: var(--error); font-size: 0.75rem; margin-top: 4px; height: 1rem; }
+.submit-btn { width: 100%; padding: 12px; background: var(--primary); color: white; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; }
+
+/* Filter Panel */
+.filter-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px; }
+.filter-group { display: flex; flex-direction: column; gap: 5px; }
+.filter-group label { font-size: 0.8rem; font-weight: bold; color: #666; }
+.date-range, .amount-range { display: flex; gap: 5px; }
+.date-range input, .amount-range input { width: 50%; font-size: 0.8rem; padding: 5px; }
+.full-width { grid-column: span 2; }
+.cat-checkboxes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; font-size: 0.8rem; }
+.cat-checkboxes label { font-weight: normal; display: flex; align-items: center; gap: 5px; cursor: pointer; }
+
+.secondary-btn { width: 100%; padding: 8px; background: #eee; border: 1px solid #ccc; border-radius: 6px; cursor: pointer; }
+.danger-btn { padding: 8px 15px; background: var(--error); color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+
+.list-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+#transaction-list { list-style: none; padding: 0; }
+.transaction-item {
+    background: #fafafa; padding: 12px; border-bottom: 1px solid #eee;
+    display: grid; grid-template-columns: 40px 1fr auto auto; align-items: center; gap: 15px; font-size: 0.9rem;
+}
+.transaction-item.selected { background: #eef6ff; border-left: 4px solid var(--primary); }
+.item-details span { display: block; }
+.item-details .member-cat { font-size: 0.75rem; color: #888; }
+.amount-val { font-weight: bold; }
+.amount-val.inc { color: var(--income); }
+.amount-val.exp { color: var(--expense); }
+.btn-edit { margin-right: 10px; cursor: pointer; background: none; border: none; color: var(--primary); font-size: 0.8rem; }
+```
+
+### 3. app.js
+This is where the logic resides. I've implemented a `stateHistory` stack for Undo/Redo and a `getFilteredTransactions` function for the filters.
+
+```javascript
+// --- State & Undo/Redo ---
+let transactions = JSON.parse(localStorage.getItem('family_txs')) || [];
+let members = JSON.parse(localStorage.getItem('family_members')) || [];
+let stateHistory = []; // Stack for Undo
+let redoStack = [];    // Stack for Redo
+
+function saveState() {
+    stateHistory.push(JSON.stringify(transactions));
+    redoStack = []; // Clear redo stack on new action
+    if (stateHistory.length > 50) stateHistory.shift(); // Limit memory
+}
+
+function undo() {
+    if (stateHistory.length === 0) return;
+    redoStack.push(JSON.stringify(transactions));
+    transactions = JSON.parse(stateHistory.pop());
+    updateUI();
+    syncStorage();
+}
+
+function redo() {
+    if (redoStack.length === 0) return;
+    stateHistory.push(JSON.stringify(transactions));
+    transactions = JSON.parse(redoStack.pop());
+    updateUI();
+    syncStorage();
+}
+
+// --- DOM Elements ---
+const financeForm = document.getElementById('finance-form');
+const memberInput = document.getElementById('new-member-name');
+const addMemberBtn = document.getElementById('add-member-btn');
+const membersListDiv = document.getElementById('members-list');
+const memberSelect = document.getElementById('member-select');
+const txList = document.getElementById('transaction-list');
+const filterCatsDiv = document.getElementById('filter-categories');
+
+// --- Member Logic ---
+function renderMembers() {
+    membersListDiv.innerHTML = '';
+    memberSelect.innerHTML = '<option value="">-- Select Member --</option>';
+    document.getElementById('filter-member').innerHTML = '<option value="">All Members</option>';
+
+    members.forEach((member, index) => {
+        const tag = document.createElement('div');
+        tag.className = 'member-tag';
+        tag.innerHTML = `${member} <span onclick="removeMember(${index})">&times;</span>`;
+        membersListDiv.appendChild(tag);
+
+        const opt = document.createElement('option');
+        opt.value = member; opt.innerText = member;
+        memberSelect.appendChild(opt);
+
+        const filterOpt = opt.cloneNode(true);
+        document.getElementById('filter-member').appendChild(filterOpt);
+    });
+    syncStorage();
+}
+
+function removeMember(index) { members.splice(index, 1); renderMembers(); }
+addMemberBtn.addEventListener('click', () => {
+    const name = memberInput.value.trim();
+    if (name && !members.includes(name)) { members.push(name); memberInput.value = ''; renderMembers(); }
+});
+
+// --- Filtering Logic ---
+const categories = ['salary', 'food', 'transport', 'shopping', 'rent', 'utilities', 'entertainment', 'medical', 'education', 'other'];
+
+function initCategoryFilters() {
+    filterCatsDiv.innerHTML = '';
+    categories.forEach(cat => {
+        const label = document.createElement('label');
+        label.innerHTML = `<input type="checkbox" value="${cat}" class="cat-filter"> ${cat.charAt(0).toUpperCase() + cat.slice(1)}`;
+        filterCatsDiv.appendChild(label);
+    });
+}
+
+function getFilteredTransactions() {
+    const search = document.getElementById('filter-search').value.toLowerCase();
+    const member = document.getElementById('filter-member').value;
+    const start = document.getElementById('filter-date-start').value;
+    const end = document.getElementById('filter-date-end').value;
+    const min = parseFloat(document.getElementById('filter-amount-min').value);
+    const max = parseFloat(document.getElementById('filter-amount-max').value);
+    const selectedCats = Array.from(document.querySelectorAll('.cat-filter:checked')).map(cb => cb.value);
+
+    return transactions.filter(tx => {
+        const matchesSearch = (tx.note || "").toLowerCase().includes(search);
+        const matchesMember = !member || tx.member === member;
+        const matchesDate = (!start || tx.date >= start) && (!end || tx.date <= end);
+        const matchesAmount = (isNaN(min) || tx.amount >= min) && (isNaN(max) || tx.amount <= max);
+        const matchesCat = selectedCats.length === 0 || selectedCats.includes(tx.category);
+        return matchesSearch && matchesMember && matchesDate && matchesAmount && matchesCat;
+    });
+}
+
+// --- Form & Transactions ---
+function validateForm() {
+    let isValid = true;
+    const errors = {
+        amount: document.getElementById('err-amount'),
+        category: document.getElementById('err-category'),
+        date: document.getElementById('err-date'),
+        member: document.getElementById('err-member')
+    };
+    Object.values(errors).forEach(el => el.innerText = '');
+
+    const amount = parseFloat(document.getElementById('amount').value);
+    if (isNaN(amount) || amount <= 0) { errors.amount.innerText = 'Please enter a positive amount'; isValid = false; }
+
+    const category = document.getElementById('category').value;
+    if (!category) { errors.category.innerText = 'Please select'; isValid = false; }
+
+    const dateVal = document.getElementById('date').value;
+    if (!dateVal) { errors.date.innerText = 'Please select a date'; isValid = false; } 
+    else if (new Date(dateVal) > new Date().setHours(0,0,0,0)) { errors.date.innerText = 'Date cannot be in the future'; isValid = false; }
+
+    const member = document.getElementById('member-select').value;
+    if (!member) { errors.member.innerText = 'Please select'; isValid = false; }
+
+    return isValid;
+}
+
+financeForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (!validateForm()) return;
+
+    saveState(); // For Undo
+    const tx = {
+        id: Date.now(),
+        amount: parseFloat(document.getElementById('amount').value),
+        category: document.getElementById('category').value,
+        date: document.getElementById('date').value,
+        member: document.getElementById('member-select').value,
+        note: document.getElementById('note').value,
+        type: ['salary'].includes(document.getElementById('category').value) ? 'income' : 'expense'
+    };
+    transactions.push(tx);
+    financeForm.reset();
+    updateUI();
+    syncStorage();
+});
+
+function deleteTransaction(id) {
+    saveState();
+    transactions = transactions.filter(t => t.id !== id);
+    updateUI();
+    syncStorage();
+}
+
+document.getElementById('batch-delete-btn').addEventListener('click', () => {
+    const selected = Array.from(document.querySelectorAll('.tx-check:checked')).map(cb => parseInt(cb.dataset.id));
+    if (selected.length === 0) return;
+    saveState();
+    transactions = transactions.filter(t => !selected.includes(t.id));
+    updateUI();
+    syncStorage();
+});
+
+// --- UI Core ---
+function updateUI() {
+    const filtered = getFilteredTransactions();
+    txList.innerHTML = '';
+    let totalInc = 0, totalExp = 0;
+
+    filtered.sort((a, b) => new Date(b.date) - new Date(a.date)).forEach(tx => {
+        if (tx.type === 'income') totalInc += tx.amount; else totalExp += tx.amount;
+
+        const li = document.createElement('li');
+        li.className = 'transaction-item';
+        li.innerHTML = `
+            <input type="checkbox" class="tx-check" data-id="${tx.id}" onchange="this.parentElement.classList.toggle('selected')">
+            <div class="item-details">
+                <strong>${tx.note || tx.category}</strong>
+                <span class="member-cat">${tx.date} • ${tx.member} • ${tx.category}</span>
+            </div>
+            <div>
+                <button class="btn-edit" onclick="editTransaction(${tx.id})">Edit</button>
+                <button class="btn-edit" style="color:var(--error)" onclick="deleteTransaction(${tx.id})">Delete</button>
+            </div>
+            <div class="amount-val ${tx.type === 'income' ? 'inc' : 'exp'}">
+                ${tx.type === 'income' ? '+' : '-'}$${tx.amount.toFixed(2)}
+            </div>
+        `;
+        txList.appendChild(li);
+    });
+
+    document.getElementById('total-balance').innerText = `$${(totalInc - totalExp).toFixed(2)}`;
+    document.getElementById('total-income').innerText = `$${totalInc.toFixed(2)}`;
+    document.getElementById('total-expense').innerText = `$${totalExp.toFixed(2)}`;
+}
+
+function editTransaction(id) {
+    const tx = transactions.find(t => t.id === id);
+    if (!tx) return;
+    
+    document.getElementById('amount').value = tx.amount;
+    document.getElementById('category').value = tx.category;
+    document.getElementById('date').value = tx.date;
+    document.getElementById('member-select').value = tx.member;
+    document.getElementById('note').value = tx.note;
+    
+    // To handle "Edit", we remove the old one and let the user submit a new one
+    // But to make it an Undoable "Edit" operation:
+    saveState();
+    transactions = transactions.filter(t => t.id !== id);
+    updateUI();
+}
+
+function syncStorage() {
+    localStorage.setItem('family_txs', JSON.stringify(transactions));
+    localStorage.setItem('family_members', JSON.stringify(members));
+}
+
+// --- Event Listeners ---
+document.getElementById('clear-filters').addEventListener('click', () => {
+    document.getElementById('filter-search').value = '';
+    document.getElementById('filter-member').value = '';
+    document.getElementById('filter-date-start').value = '';
+    document.getElementById('filter-date-end').value = '';
+    document.getElementById('filter-amount-min').value = '';
+    document.getElementById('filter-amount-max').value = '';
+    document.querySelectorAll('.cat-filter').forEach(cb => cb.checked = false);
+    updateUI();
+});
+
+// Listen for any filter change
+document.querySelector('.filter-panel').addEventListener('input', updateUI);
+
+// Keyboard shortcuts
+window.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.key === 'z') { e.preventDefault(); undo(); }
+    if (e.ctrlKey && e.key === 'y') { e.preventDefault(); redo(); }
+});
+
+// Init
+initCategoryFilters();
+renderMembers();
+updateUI();
+```
+
+### How the new features work:
+1.  **Combined Filtering**: I used a `getFilteredTransactions()` function. Every time an input in the filter panel changes (via the `input` event listener), the UI re-renders. The logic uses `AND` (meaning a record must pass *all* active filters to show).
+2.  **Undo/Redo (Ctrl+Z / Ctrl+Y)**: 
+    *   Before any action that changes the `transactions` array (`saveState()`), I push a JSON string of the current array into the `stateHistory` stack.
+    *   `Undo` pops the last state from history, pushes the current state to the `redoStack`, and restores the popped state.
+    *   `Redo` does the opposite.
+3.  **Batch Delete**: I added checkboxes to every list item. The "Delete Selected" button collects all checked IDs and removes them in one operation (which is saved as a single snapshot in the undo stack).
+4.  **Edit**: Clicking "Edit" fills the form with the existing data and removes the original record. Since `saveState()` is called, you can undo an accidental edit.

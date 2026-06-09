@@ -85,6 +85,36 @@ Examples:
         help="Disable LLM-based reflection (faster but less accurate)",
     )
     parser.add_argument(
+        "--think-model",
+        help="Model for thinking/planning (overrides THINK_MODEL env var)",
+    )
+    parser.add_argument(
+        "--execute-model",
+        help="Model for action execution (overrides EXECUTE_MODEL env var)",
+    )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Resume from last checkpoint (if interrupted)",
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Preview plan and actions without executing",
+    )
+    parser.add_argument(
+        "--max-llm-calls",
+        type=int,
+        default=0,
+        help="Max LLM calls before stopping (0=unlimited)",
+    )
+    parser.add_argument(
+        "--wall-time-limit",
+        type=int,
+        default=0,
+        help="Max execution time in seconds (0=unlimited)",
+    )
+    parser.add_argument(
         "--list-providers",
         action="store_true",
         help="List available providers",
@@ -123,6 +153,14 @@ def create_agent(args: argparse.Namespace) -> AgentEngine:
         max_task_retries=args.max_retries,
         enable_llm_reflection=not args.no_llm_reflection,
         trace_enabled=True,
+        think_model=args.think_model or os.environ.get("THINK_MODEL"),
+        think_provider=os.environ.get("THINK_PROVIDER"),
+        execute_model=args.execute_model or os.environ.get("EXECUTE_MODEL"),
+        execute_provider=os.environ.get("EXECUTE_PROVIDER"),
+        resume=getattr(args, "resume", False),
+        dry_run=getattr(args, "dry_run", False),
+        max_llm_calls=getattr(args, "max_llm_calls", 0),
+        wall_time_limit=getattr(args, "wall_time_limit", 0),
     )
 
     return AgentEngine(config)

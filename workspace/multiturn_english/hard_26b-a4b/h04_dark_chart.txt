@@ -1,0 +1,349 @@
+To handle professional-grade charts, we will integrate **Chart.js** via CDN. We will also overhaul the CSS to use **CSS Variables**, which makes the "Dark Mode" implementation extremely clean and efficient.
+
+### 1. index.html
+I have added the theme toggle, the month selector, and the chart containers.
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Family Finance Pro</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Chart.js CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <div>
+                <h1>Finance Pro</h1>
+                <p id="theme-status">Cozy Mode</p>
+            </div>
+            <button id="theme-toggle" class="icon-btn" title="Toggle Dark/Light Mode">🌓</button>
+        </header>
+
+        <section class="summary-container">
+            <div class="card">
+                <h3>Total Balance</h3>
+                <p id="balance" class="balance">$0.00</p>
+            </div>
+        </section>
+
+        <!-- Charts Section -->
+        <section class="charts-section">
+            <div class="chart-controls">
+                <h3>Analytics</h3>
+                <input type="month" id="chart-month-selector">
+            </div>
+            
+            <div class="charts-grid">
+                <div class="chart-container">
+                    <canvas id="categoryChart"></canvas>
+                </div>
+                <div class="chart-container">
+                    <canvas id="memberChart"></canvas>
+                </div>
+                <div class="chart-container full-width">
+                    <canvas id="trendChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- [Existing Member Management & Form Sections go here - same as previous version] -->
+        <!-- Note: For brevity, assume the previous HTML sections are present below -->
+        <section class="member-section">...</section>
+        <section class="form-container">...</section>
+        <section class="history-container">...</section>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
+```
+
+### 2. style.css
+The "Warm/Cozy" scheme uses cream, amber, and deep teal colors. I have used CSS variables for all colors to allow the theme toggle to work by simply changing one class on the `body`.
+
+```css
+/* --- THEME VARIABLES --- */
+:root {
+    /* Light Mode: Warm Cream & Amber */
+    --bg-color: #fdf6e3;
+    --container-bg: #ffffff;
+    --text-main: #586e75;
+    --text-heading: #073642;
+    --card-bg: #eee8d5;
+    --accent: #b58900;
+    --input-bg: #ffffff;
+    --border-color: #d3af8d;
+    --error: #dc322f;
+    --success: #859900;
+    --danger: #cb4b16;
+}
+
+body.dark-mode {
+    /* Dark Mode: Midnight & Deep Teal */
+    --bg-color: #073642;
+    --container-bg: #002b36;
+    --text-main: #93a1a1;
+    --text-heading: #fdf6e3;
+    --card-bg: #073642;
+    --accent: #d33682;
+    --input-bg: #002b36;
+    --border-color: #586e75;
+}
+
+/* --- RESET & BASE --- */
+* { box-sizing: border-box; transition: background 0.3s, color 0.3s; }
+
+body {
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-main);
+    margin: 0;
+    padding: 15px;
+    display: flex;
+    justify-content: center;
+    font-size: 18px; /* Larger base font for mobile */
+}
+
+.container {
+    width: 100%;
+    max-width: 600px;
+    background: var(--container-bg);
+    padding: 1.5rem;
+    border-radius: 16px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+}
+
+header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+h1, h2, h3 { color: var(--text-heading); margin: 0; }
+
+/* --- BUTTONS & INPUTS (Mobile Friendly) --- */
+button, input, select {
+    min-height: 48px; /* Minimum touch target size */
+    font-size: 1rem;
+    border-radius: 8px;
+}
+
+.icon-btn {
+    background: none;
+    border: 2px solid var(--border-color);
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 5px 12px;
+}
+
+/* --- CHARTS --- */
+.charts-section {
+    margin-bottom: 2rem;
+    padding: 15px;
+    background: var(--card-bg);
+    border-radius: 12px;
+}
+
+.chart-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.charts-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+}
+
+.chart-container {
+    position: relative;
+    height: 250px;
+    width: 100%;
+}
+
+.full-width { grid-column: span 2; height: 300px; }
+
+/* Responsive adjustment */
+@media (max-width: 480px) {
+    .charts-grid { grid-template-columns: 1fr; }
+    .full-width { grid-column: span 1; }
+}
+
+/* [Keep existing form and list styles, but update color references to use variables] */
+.card { background: var(--card-bg); color: var(--text-heading); padding: 1rem; border-radius: 10px; text-align: center; }
+.input-group input, .input-group select { 
+    width: 100%; 
+    padding: 12px; 
+    background: var(--input-bg); 
+    color: var(--text-main); 
+    border: 2px solid var(--border-color); 
+}
+```
+
+### 3. app.js
+The logic now includes a `ChartManager` to handle lifecycle (creating/destroying) and the theme toggle.
+
+```javascript
+/** 
+ * STATE & THEME MANAGEMENT 
+ **/
+const state = {
+    transactions: JSON.parse(localStorage.getItem('transactions')) || [],
+    members: JSON.parse(localStorage.getItem('members')) || ['Admin'],
+    isDarkMode: localStorage.getItem('darkMode') === 'true',
+    currentChartMonth: new Date().toISOString().slice(0, 7), // YYYY-MM
+    charts: {} // Store Chart.js instances
+};
+
+// --- THEME LOGIC ---
+function initTheme() {
+    if (state.isDarkMode) document.body.classList.add('dark-mode');
+    document.getElementById('theme-toggle').addEventListener('click', () => {
+        state.isDarkMode = !state.isDarkMode;
+        document.body.classList.toggle('dark-mode');
+        localStorage.setItem('darkMode', state.isDarkMode);
+        render(); // Re-render to update chart colors if necessary
+    });
+}
+
+/**
+ * CHARTING LOGIC
+ **/
+function updateCharts() {
+    const ctxCat = document.getElementById('categoryChart').getContext('2d');
+    const ctxMem = document.getElementById('memberChart').getContext('2d');
+    const ctxTrend = document.getElementById('trendChart').getContext('2d');
+
+    // 1. Filter data for the selected month
+    const monthTransactions = state.transactions.filter(t => t.date.startsWith(state.currentChartMonth));
+    
+    // 2. Aggregate Category Data (Pie)
+    const catTotals = {};
+    monthTransactions.forEach(t => {
+        if (t.amount < 0) { // Only chart expenses
+            catTotals[t.category] = (catTotals[t.category] || 0) + Math.abs(t.amount);
+        }
+    });
+
+    // 3. Aggregate Member Data (Bar)
+    const memTotals = {};
+    monthTransactions.forEach(t => {
+        if (t.amount < 0) {
+            memTotals[t.member] = (memTotals[t.member] || 0) + Math.abs(t.amount);
+        }
+    });
+
+    // 4. Aggregate 6-Month Trend (Line)
+    const trendData = [];
+    const trendLabels = [];
+    for (let i = 5; i >= 0; i--) {
+        const d = new Date();
+        d.setMonth(d.getMonth() - i);
+        const mStr = d.toISOString().slice(0, 7);
+        const mSum = state.transactions
+            .filter(t => t.date.startsWith(mStr) && t.amount < 0)
+            .reduce((acc, t) => acc + Math.abs(t.amount), 0);
+        trendLabels.push(mStr);
+        trendData.push(mSum);
+    }
+
+    // Helper to destroy old charts to prevent memory leaks
+    const destroyChart = (id) => {
+        if (state.charts[id]) state.charts[id].destroy();
+    };
+
+    // Create/Update Pie Chart
+    destroyChart('cat');
+    state.charts['cat'] = new Chart(ctxCat, {
+        type: 'pie',
+        data: {
+            labels: Object.keys(catTotals),
+            datasets: [{
+                data: Object.values(catTotals),
+                backgroundColor: ['#ff6384', '#36a2eb', '#cc65fe', '#ffce56', '#2ecc71', '#e74c3c', '#f1c40f', '#9b59b6']
+            }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { title: { display: true, text: 'Spending by Category' } } }
+    });
+
+    // Create/Update Bar Chart
+    destroyChart('mem');
+    state.charts['mem'] = new Chart(ctxMem, {
+        type: 'bar',
+        data: {
+            labels: Object.keys(memTotals),
+            datasets: [{
+                label: 'Spent ($)',
+                data: Object.values(memTotals),
+                backgroundColor: '#4a90e2'
+            }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { title: { display: true, text: 'Spending by Member' } } }
+    });
+
+    // Create/Update Line Chart
+    destroyChart('trend');
+    state.charts['trend'] = new Chart(ctxTrend, {
+        type: 'line',
+        data: {
+            labels: trendLabels,
+            datasets: [{
+                label: 'Monthly Expenses',
+                data: trendData,
+                borderColor: '#b58900',
+                tension: 0.3,
+                fill: true,
+                backgroundColor: 'rgba(181, 137, 0, 0.1)'
+            }]
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { title: { display: true, text: '6-Month Spending Trend' } } }
+    });
+}
+
+// --- INITIALIZATION & EVENT LISTENERS ---
+
+function render() {
+    // [Include the same transaction rendering logic from previous steps]
+    // ...
+    updateCharts();
+}
+
+// Month Selector Listener
+document.getElementById('chart-month-selector').addEventListener('change', (e) => {
+    state.currentChartMonth = e.target.value;
+    updateCharts();
+});
+
+// Initialize App
+window.addEventListener('DOMContentLoaded', () => {
+    initTheme();
+    
+    // Set default month in selector
+    const selector = document.getElementById('chart-month-selector');
+    selector.value = state.currentChartMonth;
+
+    // [Add existing listeners for Form, Undo, Redo, Members here]
+    // ...
+    
+    render();
+});
+```
+
+### How to test the new features:
+1.  **Theme Toggle:** Click the 🌓 icon. Notice the background turns into a deep teal and the text becomes a soft cream. Refresh the page; it stays dark.
+2.  **Responsive Charts:** Resize your browser window. On a mobile-sized window, the charts will stack vertically instead of being side-by-side.
+3.  **Analytics:** 
+    *   Add several transactions with different categories and members. 
+    *   Ensure some have a negative amount (e.g., `-50`) so they show up in the "Spending" charts.
+    *   Use the **Month Selector** to change the data. The Pie and Bar charts will update to show only what you spent in that specific month.
+    *   The **Line Chart** will always show the last 6 months regardless of the selector (it's a trend tracker).
+4.  **Mobile Usability:** All inputs and buttons have a `min-height` of `48px`, making them easy to tap with a thumb.

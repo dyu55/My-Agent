@@ -22,10 +22,20 @@ class FileTools:
         if not path:
             return self.workspace
 
+        # Strip workspace prefix if model returned an absolute/relative path
+        # that already includes the workspace (e.g., "_workspaces/task/file.py")
+        ws = str(Path(self.workspace).resolve())
+        if path.startswith(ws + "/") or path.startswith(ws + "\\"):
+            path = path[len(ws) + 1:]
+        # Also handle relative workspace prefix
+        ws_name = Path(self.workspace).name
+        if "/" in path and path.split("/", 1)[0] == ws_name:
+            path = path.split("/", 1)[1]
+
         target = Path(self.workspace) / path
         resolved = target.resolve()
 
-        if not str(resolved).startswith(str(Path(self.workspace).resolve())):
+        if not str(resolved).startswith(ws):
             return "Error: Path escapes workspace"
         return str(resolved)
 

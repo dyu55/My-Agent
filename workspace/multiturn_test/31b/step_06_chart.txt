@@ -1,0 +1,414 @@
+为了实现这个功能，我们需要引入一个专业的图表库。既然你不需要服务器，最简单且最强大的方法是使用 **Chart.js**。这是一个非常流行的 JavaScript 库，它可以直接通过网络加载，不需要你安装任何东西。
+
+我为你增加了一个**“支出分布饼图”**。饼图最适合展示“占比”，能让你一眼看出钱都花在哪个类别上了。
+
+以下是更新后的完整代码。**请再次覆盖你的 `.html` 文件，保存并刷新。**
+
+### 💻 升级版：带可视化图表的家庭账本
+
+```html
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🏡 温暖家庭账本</title>
+    <!-- 引入 Chart.js 图表库 -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-color: #fdfbf7;
+            --card-bg: #ffffff;
+            --primary-color: #a8bca1;
+            --secondary-color: #dfcfbe;
+            --accent-color: #e9967a;
+            --text-main: #5d576b;
+            --text-light: #9491a3;
+            --income-color: #8eb69b;
+            --expense-color: #d68a8a;
+            --danger-bg: #ffcfcf;
+            --danger-text: #c0392b;
+        }
+
+        body {
+            font-family: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+        }
+
+        .app-container {
+            width: 100%;
+            max-width: 1200px;
+            padding: 20px;
+            display: grid;
+            grid-template-columns: 320px 1fr;
+            gap: 25px;
+            box-sizing: border-box;
+        }
+
+        @media (max-width: 850px) {
+            .app-container { grid-template-columns: 1fr; }
+            .sidebar { order: 2; }
+            .main-content { order: 1; }
+        }
+
+        .card {
+            background: var(--card-bg);
+            border-radius: 24px;
+            padding: 24px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.04);
+            border: 1px solid rgba(0,0,0,0.02);
+            margin-bottom: 25px;
+        }
+
+        .sidebar { display: flex; flex-direction: column; }
+
+        h2 {
+            font-size: 1.3rem;
+            margin-top: 0;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            color: var(--text-main);
+        }
+
+        .form-group { margin-bottom: 18px; }
+        label { display: block; margin-bottom: 8px; font-size: 14px; color: var(--text-light); padding-left: 4px; }
+        input, select {
+            width: 100%; padding: 12px; border: 2px solid #f0f0f0; border-radius: 12px;
+            box-sizing: border-box; font-size: 15px; transition: all 0.3s; color: var(--text-main); background-color: #fafafa;
+        }
+        input:focus, select:focus { outline: none; border-color: var(--primary-color); background-color: #fff; }
+
+        .btn-submit {
+            width: 100%; padding: 14px; background-color: var(--primary-color); color: white;
+            border: none; border-radius: 12px; cursor: pointer; font-size: 16px; font-weight: bold;
+            transition: transform 0.2s, background-color 0.3s; margin-top: 10px;
+        }
+        .btn-submit:hover { background-color: #9ab58f; transform: translateY(-2px); }
+
+        .main-content { display: flex; flex-direction: column; }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        @media (max-width: 600px) { .stats-grid { grid-template-columns: 1fr; } }
+
+        .stat-card { text-align: center; }
+        .stat-label { font-size: 14px; color: var(--text-light); margin-bottom: 10px; }
+        .stat-value { font-size: 22px; font-weight: bold; color: var(--text-main); }
+
+        #budget-warning {
+            display: none; background-color: var(--danger-bg); color: var(--danger-text);
+            padding: 20px; border-radius: 20px; text-align: center; border: 2px dashed var(--danger-text);
+            margin-bottom: 25px; animation: soft-shake 0.5s ease-in-out;
+        }
+
+        @keyframes soft-shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-4px); }
+            75% { transform: translateX(4px); }
+        }
+
+        /* 图表容器 */
+        .chart-container {
+            position: relative;
+            margin: auto;
+            height: 300px;
+            width: 300px;
+        }
+
+        .history-card h2 { justify-content: space-between; }
+        .balance-tag { font-size: 14px; background: var(--secondary-color); padding: 4px 12px; border-radius: 20px; color: var(--text-main); }
+
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th { text-align: left; padding: 12px; color: var(--text-light); font-weight: normal; font-size: 14px; border-bottom: 2px solid #f9f9f9; }
+        td { padding: 15px 12px; border-bottom: 1px solid #f9f9f9; font-size: 15px; }
+        .amt-positive { color: var(--income-color); font-weight: 600; }
+        .amt-negative { color: var(--expense-color); font-weight: 600; }
+
+        .clear-btn {
+            background: none; border: none; color: var(--text-light); cursor: pointer;
+            font-size: 12px; text-decoration: underline; width: auto; margin: 20px auto 0; display: block;
+        }
+    </style>
+</head>
+<body>
+
+<div class="app-container">
+    <div class="sidebar">
+        <div class="card">
+            <h2>📝 记一笔</h2>
+            <div class="form-group">
+                <label>日期</label>
+                <input type="date" id="date">
+            </div>
+            <div class="form-group">
+                <label>类型</label>
+                <select id="type" onchange="updateCategories()">
+                    <option value="支出">支出</option>
+                    <option value="收入">收入</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>类别</label>
+                <select id="category"></select>
+            </div>
+            <div class="form-group">
+                <label>金额</label>
+                <input type="number" id="amount" placeholder="0.00" step="0.01">
+            </div>
+            <div class="form-group">
+                <label>备注</label>
+                <input type="text" id="note" placeholder="例如：买水果">
+            </div>
+            <button class="btn-submit" onclick="addRecord()">保存记录</button>
+        </div>
+        <button class="clear-btn" onclick="clearAll()">🗑️ 清空所有账单数据</button>
+    </div>
+
+    <div class="main-content">
+        <div id="budget-warning">
+            <h3 style="margin:0">⚠️ 预算超支啦！</h3>
+            <p id="warning-text" style="margin:8px 0 0 0; font-size:15px"></p>
+        </div>
+
+        <div class="stats-grid">
+            <div class="card stat-card">
+                <div class="stat-label">本月收入</div>
+                <div id="month-income" class="stat-value">￥0.00</div>
+            </div>
+            <div class="card stat-card">
+                <div class="stat-label">本月支出</div>
+                <div id="month-expense" class="stat-value">￥0.00</div>
+            </div>
+            <div class="card stat-card">
+                <div class="stat-label">本月结余</div>
+                <div id="month-net" class="stat-value">￥0.00</div>
+            </div>
+        </div>
+
+        <!-- 新增：支出分析图表 -->
+        <div class="card">
+            <h2>📊 本月支出分布</h2>
+            <div class="chart-container">
+                <canvas id="expenseChart"></canvas>
+            </div>
+        </div>
+
+        <div class="card history-card">
+            <h2>
+                📅 账单明细
+                <span class="balance-tag">总余额: <span id="total-balance">￥0.00</span></span>
+            </h2>
+            <div style="overflow-x: auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>日期</th>
+                            <th>类别</th>
+                            <th>备注</th>
+                            <th>金额</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-body"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const BUDGET = 5000; 
+    const CATEGORIES = {
+        "支出": ["🍱 餐饮", "🚌 交通", "🛍️ 购物", "🎬 娱乐", "🏠 房租水电", "💊 医疗", "🌸 其他"],
+        "收入": ["💰 工资", "🧧 红包", "📈 投资", "🎁 奖金", "✨ 其他"]
+    };
+
+    let myChart = null; // 用于存储图表实例
+
+    document.getElementById('date').valueAsDate = new Date();
+    updateCategories();
+
+    let records = JSON.parse(localStorage.getItem('myFamilyFinance')) || [];
+
+    function updateCategories() {
+        const type = document.getElementById('type').value;
+        const catSelect = document.getElementById('category');
+        catSelect.innerHTML = '';
+        CATEGORIES[type].forEach(cat => {
+            const opt = document.createElement('option');
+            opt.value = cat;
+            opt.innerHTML = cat;
+            catSelect.appendChild(opt);
+        });
+    }
+
+    function addRecord() {
+        const date = document.getElementById('date').value;
+        const type = document.getElementById('type').value;
+        const category = document.getElementById('category').value;
+        const amount = parseFloat(document.getElementById('amount').value);
+        const note = document.getElementById('note').value;
+
+        if (!date || isNaN(amount) || amount <= 0) {
+            alert("请填好日期和正确的金额哦 🌸");
+            return;
+        }
+
+        const record = { date, type, category, amount: type === "收入" ? amount : -amount, note };
+        records.push(record);
+        localStorage.setItem('myFamilyFinance', JSON.stringify(records));
+        
+        document.getElementById('amount').value = '';
+        document.getElementById('note').value = '';
+        render();
+    }
+
+    function clearAll() {
+        if (confirm("确定要清空所有家庭账单吗？")) {
+            records = [];
+            localStorage.removeItem('myFamilyFinance');
+            render();
+        }
+    }
+
+    function render() {
+        const tbody = document.getElementById('table-body');
+        tbody.innerHTML = '';
+        let totalBalance = 0;
+        let mIncome = 0;
+        let mExpense = 0;
+
+        const now = new Date();
+        const currentMonth = now.getMonth();
+        const currentYear = now.getFullYear();
+
+        // 用于统计各类别支出的对象
+        const expenseMap = {};
+
+        const sortedRecords = [...records].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        sortedRecords.forEach(r => {
+            totalBalance += r.amount;
+            const rDate = new Date(r.date);
+            if (rDate.getMonth() === currentMonth && rDate.getFullYear() === currentYear) {
+                if (r.amount > 0) {
+                    mIncome += r.amount;
+                } else {
+                    const absAmt = Math.abs(r.amount);
+                    mExpense += absAmt;
+                    // 累加到对应类别
+                    expenseMap[r.category] = (expenseMap[r.category] || 0) + absAmt;
+                }
+            }
+
+            tbody.innerHTML += `<tr>
+                <td>${r.date}</td>
+                <td>${r.category}</td>
+                <td>${r.note}</td>
+                <td class="${r.amount > 0 ? 'amt-positive' : 'amt-negative'}">
+                    ${r.amount > 0 ? '+' : ''}${r.amount.toFixed(2)}
+                </td>
+            </tr>`;
+        });
+
+        document.getElementById('total-balance').innerText = `￥${totalBalance.toFixed(2)}`;
+        document.getElementById('month-income').innerText = `￥${mIncome.toFixed(2)}`;
+        document.getElementById('month-expense').innerText = `￥${mExpense.toFixed(2)}`;
+        document.getElementById('month-net').innerText = `￥${(mIncome - mExpense).toFixed(2)}`;
+
+        const warningDiv = document.getElementById('budget-warning');
+        if (mExpense > BUDGET) {
+            warningDiv.style.display = 'block';
+            document.getElementById('warning-text').innerText = `本月已支出 ￥${mExpense.toFixed(2)}，超出预算 ￥${(mExpense - BUDGET).toFixed(2)}。记得省着花哦 🌿`;
+        } else {
+            warningDiv.style.display = 'none';
+        }
+
+        updateChart(expenseMap);
+    }
+
+    function updateChart(expenseMap) {
+        const ctx = document.getElementById('expenseChart').getContext('2d');
+        
+        const labels = Object.keys(expenseMap);
+        const data = Object.values(expenseMap);
+
+        // 如果没有支出数据，显示一个简单的提示
+        if (labels.length === 0) {
+            if(myChart) myChart.destroy();
+            return;
+        }
+
+        // 销毁旧图表，创建新图表
+        if (myChart) {
+            myChart.destroy();
+        }
+
+        myChart = new Chart(ctx, {
+            type: 'pie', // 饼图
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: data,
+                    backgroundColor: [
+                        '#a8bca1', '#dfcfbe', '#e9967a', '#8eb69b', 
+                        '#d68a8a', '#b8c5d6', '#f2d5a6', '#c9ada7'
+                    ],
+                    borderWidth: 2,
+                    borderColor: '#ffffff'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: {
+                            color: '#5d576b',
+                            font: { size: 12 }
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    render();
+</script>
+</body>
+</html>
+```
+
+### 📈 本次更新详解：
+
+**1. 引入了 Chart.js**
+我在代码顶部添加了 `<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>`。这就像是在你的网页里安装了一个“图表插件”，让网页拥有了绘制复杂图形的能力。
+
+**2. 数据处理逻辑 (Data Mapping)**
+为了画图，程序现在在执行 `render()`（渲染）时，会额外做一件事：
+*   它会创建一个 `expenseMap`（支出地图）。
+*   比如，当你录入一笔“🍱 餐饮 20元”和另一笔“🍱 餐饮 30元”时，它会在地图里记录：`{"🍱 餐饮": 50}`。
+*   最后把这个地图的“类别”作为饼图的标签，“金额”作为饼图的大小。
+
+**3. 视觉设计**
+*   **饼图 (Pie Chart)**：我选择了饼图，因为它能最直观地显示**比例**。
+*   **色系同步**：图表的颜色我特意设置成了之前的莫兰迪暖色系（鼠尾草绿、浅杏色、珊瑚橙等），确保图表和整体温馨的风格统一，不会显得突兀。
+*   **自动刷新**：每当你点击“保存记录”或“清空数据”时，图表会自动销毁并重新绘制，确保你看到的是最新的数据。
+
+### 💡 使用小建议：
+*   **数据越多，图表越准**：当你录入不同类别的支出后，你会发现饼图被分成了很多块，颜色各异，一眼就能看出哪个“大块头”在吞噬你的预算。
+*   **手机端查看**：在手机上，图表会由于响应式设计自动缩放在中间，非常方便查看。
+
+**现在快去试试吧！随便录入几笔不同类别的支出，看看那个漂亮的彩色饼图是不是出来了？**

@@ -83,9 +83,13 @@ class LLMCache:
 
         self._cache: dict[str, CacheEntry] = {}
         self._stats = CacheStats()
+        self._dirty = False
+        self._writes_since_flush = 0
+        self._flush_interval = 20  # flush every N writes
 
         self._load_cache()
         self._load_stats()
+        atexit.register(self.flush)
 
     def _load_cache(self) -> None:
         """Load cache from disk."""
@@ -135,10 +139,52 @@ class LLMCache:
         with open(self.stats_file, "w", encoding="utf-8") as f:
             json.dump(self._stats.__dict__, f, indent=2)
 
+    def flush(self) -> None:
+        """Flush pending writes to disk. Call explicitly or rely on atexit."""
+        if self._dirty:
+            self._save_cache()
+            self._save_stats()
+            self._dirty = False
+            self._writes_since_flush = 0
+
+    def _mark_dirty(self) -> None:
+        """Mark state as dirty and flush if interval reached."""
+        self._dirty = True
+        self._writes_since_flush += 1
+        if self._writes_since_flush >= self._flush_interval:
+            self.flush()
+
     def _hash_prompt(self, prompt: str, model: str, provider: str) -> str:
         """Generate cache key from prompt and model."""
-        content = f"{provider}:{model}:{prompt}"
+        normalized = self._normalize_prompt(prompt)
+        content = f"{provider}:{model}:{normalized}"
         return hashlib.sha256(content.encode()).hexdigest()
+
+    @staticmethod
+    def _normalize_prompt(prompt: str) -> str:
+        """Strip volatile parts of a prompt for stable cache keys.
+
+        Removes execution history sections that change every turn,
+        keeping only the task description and static instructions.
+        """
+        import re
+        # Strip "Done:" / "已完成的任务" section (changes every turn)
+        prompt = re.sub(
+            r"(Done|已完成的任务):.*?(?=\n\n|\n## |\nCommands:|\nRules:|\nReturn|\Z)",
+            "",
+            prompt,
+            flags=re.DOTALL,
+        )
+        # Strip execution summary blocks
+        prompt = re.sub(
+            r"(execution_summary|已执行操作).*?(?=\n\n|\n## |\Z)",
+            "",
+            prompt,
+            flags=re.DOTALL,
+        )
+        # Collapse whitespace
+        prompt = re.sub(r"\s+", " ", prompt).strip()
+        return prompt
 
     def get(
         self,
@@ -164,23 +210,21 @@ class LLMCache:
 
         if entry is None:
             self._stats.cache_misses += 1
-            self._save_stats()
+            self._mark_dirty()
             return None
 
         # Check TTL
         if time.time() - entry.created_at >= self.ttl_seconds:
             del self._cache[cache_key]
             self._stats.cache_misses += 1
-            self._save_stats()
+            self._mark_dirty()
             return None
 
-        # Update access stats
+        # Update access stats (in-memory only; flushed periodically)
         entry.hit_count += 1
         entry.last_accessed = time.time()
         self._stats.cache_hits += 1
-
-        self._save_stats()
-        self._save_cache()
+        self._mark_dirty()
 
         return entry.response
 
@@ -215,7 +259,7 @@ class LLMCache:
         )
 
         self._cache[cache_key] = entry
-        self._save_cache()
+        self._mark_dirty()
 
     def invalidate(
         self,
@@ -237,9 +281,12 @@ class LLMCache:
         count = 0
 
         if prompt:
-            # Invalidate specific prompt across all models
-            for key, entry in list(self._cache.items()):
-                if entry.prompt_hash == hashlib.sha256(prompt.encode()).hexdigest():
+            # Invalidate specific prompt across all models/providers.
+            # Recompute hash using each entry's own model/provider.
+            to_remove = []
+            for key, entry in self._cache.items():
+                if entry.prompt_hash == self._hash_prompt(prompt, entry.model, entry.provider):
+                    to_remove.append(key)
                     del self._cache[key]
                     count += 1
         else:
@@ -257,7 +304,7 @@ class LLMCache:
                 count += 1
 
         if count > 0:
-            self._save_cache()
+            self._mark_dirty()
 
         return count
 
@@ -270,7 +317,7 @@ class LLMCache:
         """
         count = len(self._cache)
         self._cache.clear()
-        self._save_cache()
+        self.flush()  # immediate flush for destructive ops
         return count
 
     def stats(self) -> CacheStats:

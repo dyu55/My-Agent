@@ -1,0 +1,226 @@
+非常好！你现在的需求已经从一个简单的“记账本”变成了一个真正的“财务管理应用”雏形了。
+
+为了实现这些功能，我们需要对之前的代码进行“大手术”：
+1.  **HTML 部分**：我们要把原来的两个输入框，升级成一个包含“金额、类别、备注、日期”的**表单 (Form)**。
+2.  **JavaScript 部分**：我们要修改存入的数据结构，不再只存“名称和金额”，而是要存一个包含四个属性的“对象”。
+
+你可以直接把下面的完整代码**全部覆盖**掉你之前的 `index.html` 文件。我已经在代码里写了详细的中文注释，方便你理解。
+
+```html
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的专业记账本</title>
+    <style>
+        /* --- CSS 样式部分 --- */
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f0f2f5; display: flex; justify-content: center; padding: 20px; margin: 0; }
+        .container { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); width: 100%; max-width: 450px; }
+        h2 { text-align: center; color: #1a73e8; margin-top: 0; }
+        
+        /* 余额显示 */
+        .balance-card { background: linear-gradient(135deg, #1a73e8, #0d47a1); color: white; padding: 20px; border-radius: 10px; text-align: center; margin-bottom: 20px; }
+        .balance-card div { font-size: 14px; opacity: 0.8; }
+        .balance-card h1 { font-size: 32px; margin: 10px 0 0 0; }
+
+        /* 表单样式 */
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-size: 14px; color: #555; font-weight: bold; }
+        input, select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 6px; box-sizing: border-box; font-size: 14px; }
+        input:focus, select:focus { outline: none; border-color: #1a73e8; box-shadow: 0 0 5px rgba(26,115,232,0.2); }
+        
+        button { width: 100%; padding: 12px; background-color: #1a73e8; color: white; border: none; border-radius: 6px; font-size: 16px; cursor: pointer; transition: background 0.3s; }
+        button:hover { background-color: #1557b0; }
+
+        /* 列表样式 */
+        .list-title { margin-top: 30px; border-bottom: 2px solid #eee; padding-bottom: 10px; color: #333; }
+        ul { list-style: none; padding: 0; margin-top: 10px; }
+        li { background: #fff; border-bottom: 1px solid #eee; padding: 12px 5px; display: flex; justify-content: space-between; align-items: center; }
+        
+        /* 记录的内容细节 */
+        .record-info { display: flex; flex-direction: column; }
+        .record-main { display: flex; align-items: center; gap: 8px; }
+        .record-category { font-size: 12px; background: #e8f0fe; color: #1a73e8; padding: 2px 6px; border-radius: 4px; }
+        .record-date { font-size: 12px; color: #888; }
+        .record-note { font-size: 13px; color: #666; margin-top: 2px; }
+        
+        /* 金额颜色 */
+        .amount-text { font-weight: bold; font-size: 16px; }
+        .amount-plus { color: #2ecc71; } /* 收入为绿 */
+        .amount-minus { color: #e74c3c; } /* 支出为红 */
+        
+        .delete-btn { color: #ccc; cursor: pointer; margin-left: 10px; font-size: 18px; }
+        .delete-btn:hover { color: #e74c3c; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>个人财务管理</h2>
+
+    <!-- 余额卡片 -->
+    <div class="balance-card">
+        <div>当前总余额</div>
+        <h1 id="total-balance">¥ 0.00</h1>
+    </div>
+
+    <!-- 输入表单 -->
+    <div class="form-container">
+        <div class="form-group">
+            <label>金额 (支出输入负数, 如: -50)</label>
+            <input type="number" id="amount" placeholder="例如: 100 或 -50">
+        </div>
+        <div class="form-group">
+            <label>类别</label>
+            <select id="category">
+                <option value="餐饮">餐饮</option>
+                <option value="交通">交通</option>
+                <option value="购物">购物</option>
+                <option value="工资">工资</option>
+                <option value="娱乐">娱乐</option>
+                <option value="其他">其他</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>日期</label>
+            <input type="date" id="date">
+        </div>
+        <div class="form-group">
+            <label>备注 (可选)</label>
+            <input type="text" id="note" placeholder="写点什么说明...">
+        </div>
+        <button onclick="addTransaction()">确认提交</button>
+    </div>
+
+    <h3 class="list-title">历史记录</h3>
+    <ul id="transaction-list"></ul>
+</div>
+
+<script>
+    /* --- JavaScript 逻辑部分 --- */
+
+    const list = document.getElementById('transaction-list');
+    const balanceDisplay = document.getElementById('total-balance');
+    const amountInput = document.getElementById('amount');
+    const categoryInput = document.getElementById('category');
+    const dateInput = document.getElementById('date');
+    const noteInput = document.getElementById('note');
+
+    // 从本地存储读取数据
+    let transactions = JSON.parse(localStorage.getItem('myFinanceData')) || [];
+
+    // 初始化：设置默认日期为今天
+    window.onload = function() {
+        const today = new Date().toISOString().split('T')[0];
+        dateInput.value = today;
+        init();
+    };
+
+    // 核心函数：刷新页面显示
+    function init() {
+        list.innerHTML = '';
+        let total = 0;
+
+        // 按日期从新到旧排序 (简单的排序逻辑)
+        transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        transactions.forEach((t, index) => {
+            const li = document.createElement('li');
+            
+            // 根据金额正负决定颜色
+            const amountClass = t.amount >= 0 ? 'amount-plus' : 'amount-minus';
+            const amountSign = t.amount >= 0 ? '+' : '';
+
+            li.innerHTML = `
+                <div class="record-info">
+                    <div class="record-main">
+                        <span class="record-category">${t.category}</span>
+                        <span class="record-date">${t.date}</span>
+                    </div>
+                    <div class="record-note">${t.note || ''}</div>
+                </div>
+                <div style="display: flex; align-items: center;">
+                    <span class="amount-text ${amountClass}">${amountSign}${t.amount.toFixed(2)}</span>
+                    <span class="delete-btn" onclick="deleteTransaction(${index})">&times;</span>
+                </div>
+            `;
+            list.appendChild(li);
+            total += t.amount;
+        });
+
+        balanceDisplay.innerText = `¥ ${total.toFixed(2)}`;
+        localStorage.setItem('myFinanceData', JSON.stringify(transactions));
+    }
+
+    // 添加记录
+    function addTransaction() {
+        const amount = parseFloat(amountInput.value);
+        const category = categoryInput.value;
+        const date = dateInput.value;
+        const note = noteInput.value;
+
+        // 简单校验
+        if (isNaN(amount) || date === '') {
+            alert('请填写正确的金额和日期');
+            return;
+        }
+
+        // 创建新对象
+        const newEntry = {
+            amount: amount,
+            category: category,
+            date: date,
+            note: note
+        };
+
+        // 添加到数组并刷新
+        transactions.push(newEntry);
+        
+        // 清空输入框（除了日期和类别，因为它们通常是连续使用的）
+        amountInput.value = '';
+        noteInput.value = '';
+        
+        init();
+    }
+
+    // 删除记录
+    function deleteTransaction(index) {
+        if(confirm('确定要删除这条记录吗？')) {
+            transactions.splice(index, 1);
+            init();
+        }
+    }
+</script>
+
+</body>
+</html>
+```
+
+### 🛠️ 我为你做了哪些升级？
+
+1.  **数据结构升级 (The Data Model)**：
+    *   以前的每一条记录只是：`{ name, amount }`。
+    *   现在的记录变成了：`{ amount, category, date, note }`。这就像给你的账本增加了一列列的表格。
+
+2.  **表单设计 (The Form)**：
+    *   使用了 `<select>` 标签制作下拉菜单，这样你就不用手打“吃饭”或者“交通”，直接选就行，避免了手误。
+    *   使用了 `<input type="date">`，浏览器会自动为你弹出一个日历控件。
+    *   使用了 `<input type="number">`，限制了用户只能输入数字。
+
+3.  **视觉反馈 (Visual Feedback)**：
+    *   **颜色区分**：我写了一段逻辑，如果金额是正数（收入），文字显示为**绿色**；如果是负数（支出），显示为**红色**。
+    *   **余额卡片**：把余额放在了一个显眼的蓝色渐变卡片里，让你一眼就能看到有多少钱。
+    *   **自动排序**：我加入了一行代码，让你的记录**按照日期从新到旧**自动排列，最新的账单永远在最上面。
+
+4.  **用户体验 (UX)**：
+    *   **自动填充日期**：当你打开网页时，它会自动把日期设为“今天”，省去你每天选日期的麻烦。
+    *   **确认删除**：当你点删除时，会弹出一个确认框，防止误删。
+
+### 🧪 你现在可以尝试的操作：
+
+1.  **运行它**：保存后刷新浏览器，试着输入 `-20`，类别选“餐饮”，备注写“麦当劳”，看看效果。
+2.  **尝试“搞破坏”**：尝试在金额里输入文字，或者不写金额直接提交，看看程序会不会报错（我加了简单的校验，它会提醒你）。
+3.  **思考一个问题**：现在的类别（餐饮、交通等）是写死在代码里的。**如果你想增加一个“医疗”类别，你应该去代码的哪一行改？**（提示：去找 `<select>` 标签那部分）。
+
+**当你玩转了这个版本后，告诉我，我们可以进入“进阶模式”！比如：做一个饼图，直观地显示你的钱都花在哪了？**

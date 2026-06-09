@@ -6,10 +6,26 @@ logs/
 __pycache__/
 *.pyc
 *.pyo
+.agent_checkpoint.json
+.agent_trajectory.json
 
-# External Memory
+# Claude Code local
+.claude/
+
+# Local scratch and test artifacts
+scratch/
+_test_bench/
+_benchmark_workspaces/
+test.db
+*.db
+
+# Memory local data
+memory/llm_cache/
+memory/api_usage.json
 memory/session_logs/*.json
 memory/memories.json
+memory/chroma_db/
+memory/patterns/
 
 # IDE
 .DS_Store
@@ -32,9 +48,8 @@ tests/model_comparison_*.html
 tests/model_*.md
 tests/test_*.md
 
-# Test scripts (optional - uncomment if not needed)
-# run_*.sh
-# tests/run_tests.sh
+# Benchmark outputs
+benchmark_*.json
 
 # Workspace test artifacts
 workspace/workspace/
@@ -45,10 +60,7 @@ workspace/executor_test/
 workspace/file_ops/
 workspace/git_test/
 
-# ChromaDB and memory data
-memory/chroma_db/
-memory/patterns/
-
 # Workspace temp files
 workspace/__pycache__/
 workspace/memory/session_logs/
+workspace/*.db

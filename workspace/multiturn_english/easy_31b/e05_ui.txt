@@ -1,0 +1,474 @@
+To give your app a "warm and cozy" feel, we need to move away from the high-contrast "tech" colors (like neon green and deep black) and move toward a palette of **creams, sage greens, soft corals, and espresso browns**. 
+
+I have also updated the CSS to be **fully responsive**, meaning the layout will automatically adjust whether you are using a wide desktop screen or a narrow phone screen.
+
+### Copy and paste this updated code into your `index.html`:
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Home Budget Cozy</title>
+    <style>
+        :root {
+            /* Warm & Cozy Palette */
+            --bg-color: #FDF6EC;       /* Soft Cream */
+            --card-bg: #FFFFFF;       /* Pure White */
+            --primary-accent: #8E9775; /* Sage Green */
+            --income-color: #6B8E23;  /* Olive Green */
+            --expense-color: #CD5C5C; /* Indian Red/Coral */
+            --text-main: #4A3F35;     /* Espresso Brown */
+            --text-muted: #8C7E6D;    /* Warm Taupe */
+            --warning-bg: #E9967A;    /* Dark Salmon */
+            --accent-blue: #A2B5BB;   /* Muted Blue-Grey */
+            --shadow: 0 8px 20px rgba(74, 63, 53, 0.08);
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            padding: 20px;
+            line-height: 1.5;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 500px;
+            animation: fadeIn 0.6s ease-out;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        h2 { 
+            text-align: center; 
+            color: var(--text-main); 
+            font-weight: 600;
+            margin-bottom: 25px;
+            font-size: 1.8rem;
+        }
+
+        /* Balance Card */
+        .balance-card {
+            text-align: center;
+            background: var(--primary-accent);
+            color: white;
+            padding: 2rem 1rem;
+            border-radius: 24px;
+            margin-bottom: 20px;
+            box-shadow: var(--shadow);
+        }
+        .balance-label { 
+            font-size: 0.9rem; 
+            opacity: 0.9; 
+            text-transform: uppercase; 
+            letter-spacing: 1px;
+        }
+        .balance-amount { 
+            font-size: 3rem; 
+            font-weight: 700; 
+            margin-top: 5px;
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 12px;
+            margin-bottom: 25px;
+        }
+        .stat-box {
+            background: var(--card-bg);
+            padding: 15px 10px;
+            border-radius: 18px;
+            text-align: center;
+            box-shadow: var(--shadow);
+            border: 1px solid rgba(142, 151, 117, 0.1);
+        }
+        .stat-label { 
+            font-size: 0.65rem; 
+            color: var(--text-muted); 
+            text-transform: uppercase; 
+            font-weight: bold; 
+            display: block;
+            margin-bottom: 5px;
+        }
+        .stat-value { 
+            font-size: 1rem; 
+            font-weight: 700; 
+            display: block; 
+        }
+        .text-income { color: var(--income-color); }
+        .text-expense { color: var(--expense-color); }
+
+        /* Budget Warning */
+        #budget-warning {
+            display: none;
+            background-color: var(--warning-bg);
+            color: white;
+            text-align: center;
+            padding: 12px;
+            border-radius: 12px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            box-shadow: var(--shadow);
+            animation: shake 0.5s ease-in-out;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            75% { transform: translateX(5px); }
+        }
+        
+        /* Form Styling */
+        form { 
+            display: grid; 
+            grid-template-columns: 1fr 1fr; 
+            gap: 15px; 
+            background: var(--card-bg);
+            padding: 25px;
+            border-radius: 24px;
+            box-shadow: var(--shadow);
+            margin-bottom: 30px;
+        }
+        .full-width { grid-column: span 2; }
+        
+        label { 
+            font-size: 0.85rem; 
+            color: var(--text-muted); 
+            margin-bottom: 6px; 
+            display: block; 
+            font-weight: 500;
+        }
+        input, select {
+            padding: 12px;
+            border: 2px solid #F0EBE3;
+            border-radius: 12px;
+            font-size: 1rem;
+            width: 100%;
+            transition: border-color 0.3s;
+            color: var(--text-main);
+            background-color: #FBFAF8;
+        }
+        input:focus, select:focus {
+            outline: none;
+            border-color: var(--primary-accent);
+        }
+        button {
+            padding: 14px;
+            background: var(--primary-accent);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 1rem;
+            transition: transform 0.2s, background 0.3s;
+        }
+        button:hover { background: #7A8363; transform: translateY(-2px); }
+        button:active { transform: translateY(0); }
+
+        /* Backup Buttons */
+        .backup-section {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 25px;
+            justify-content: center;
+        }
+        .btn-backup {
+            background: white;
+            color: var(--text-muted);
+            font-size: 0.75rem;
+            padding: 8px 16px;
+            border: 1px solid #E0DCD5;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+        }
+        .btn-backup:hover { background: #F9F7F4; color: var(--text-main); }
+
+        /* List Styling */
+        .transaction-list { list-style: none; padding: 0; }
+        .transaction-item {
+            background: var(--card-bg);
+            padding: 16px;
+            border-radius: 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+            box-shadow: var(--shadow);
+            border-left: 6px solid #E0DCD5;
+            transition: transform 0.2s;
+        }
+        .transaction-item:hover { transform: scale(1.02); }
+        .transaction-item.income { border-left-color: var(--income-color); }
+        .transaction-item.expense { border-left-color: var(--expense-color); }
+        
+        .item-details { display: flex; flex-direction: column; }
+        .item-main { font-weight: 600; color: var(--text-main); font-size: 1.05rem; }
+        .item-sub { font-size: 0.8rem; color: var(--text-muted); margin-top: 2px; }
+        
+        .item-amount-group { display: flex; align-items: center; }
+        .item-amount { font-weight: 700; margin-right: 12px; font-size: 1.1rem; }
+        .income .item-amount { color: var(--income-color); }
+        .expense .item-amount { color: var(--expense-color); }
+        
+        .delete-btn { 
+            color: #D1C7B7; 
+            cursor: pointer; 
+            font-weight: bold; 
+            padding: 5px 10px; 
+            font-size: 1.2rem;
+            transition: color 0.2s;
+        }
+        .delete-btn:hover { color: var(--expense-color); }
+
+        #import-file { display: none; }
+
+        /* Mobile Adjustments */
+        @media (max-width: 400px) {
+            form { grid-template-columns: 1fr; }
+            .full-width { grid-column: span 1; }
+            .stats-grid { grid-template-columns: 1fr; }
+            .stat-box { display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; }
+            .stat-label { margin-bottom: 0; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>🌿 Home Budget Cozy</h2>
+    
+    <div class="balance-card">
+        <div class="balance-label">Available Balance</div>
+        <div class="balance-amount" id="balance">$0.00</div>
+    </div>
+
+    <div id="budget-warning">⚠️ Monthly Budget Exceeded!</div>
+
+    <div class="stats-grid">
+        <div class="stat-box">
+            <span class="stat-label">Income</span>
+            <span id="month-income" class="stat-value text-income">$0.00</span>
+        </div>
+        <div class="stat-box">
+            <span class="stat-label">Spending</span>
+            <span id="month-spend" class="stat-value text-expense">$0.00</span>
+        </div>
+        <div class="stat-box">
+            <span class="stat-label">Remaining</span>
+            <span id="month-left" class="stat-value">$0.00</span>
+        </div>
+    </div>
+
+    <div class="backup-section">
+        <button class="btn-backup" onclick="exportData()">💾 Backup</button>
+        <button class="btn-backup" onclick="document.getElementById('import-file').click()">📂 Restore</button>
+        <input type="file" id="import-file" accept=".json" onchange="importData(event)">
+    </div>
+
+    <form id="transaction-form">
+        <div class="full-width">
+            <label>Transaction Type</label>
+            <select id="type">
+                <option value="income">Income (+)</option>
+                <option value="expense">Expense (-)</option>
+            </select>
+        </div>
+        <div>
+            <label>Amount</label>
+            <input type="number" id="amount" step="0.01" placeholder="0.00" required>
+        </div>
+        <div>
+            <label>Category</label>
+            <select id="category">
+                <option value="Salary">Salary</option>
+                <option value="Food">Food</option>
+                <option value="Transport">Transport</option>
+                <option value="Shopping">Shopping</option>
+                <option value="Bills">Bills</option>
+                <option value="Entertainment">Entertainment</option>
+                <option value="Other">Other</option>
+            </select>
+        </div>
+        <div>
+            <label>Date</label>
+            <input type="date" id="date" required>
+        </div>
+        <div>
+            <label>Note</label>
+            <input type="text" id="note" placeholder="Details...">
+        </div>
+        <button type="submit" class="full-width">Add to Ledger</button>
+    </form>
+
+    <ul class="transaction-list" id="list"></ul>
+</div>
+
+<script>
+    const MONTHLY_BUDGET = 5000;
+    const balanceDisplay = document.getElementById('balance');
+    const monthIncomeDisplay = document.getElementById('month-income');
+    const monthSpendDisplay = document.getElementById('month-spend');
+    const monthLeftDisplay = document.getElementById('month-left');
+    const budgetWarning = document.getElementById('budget-warning');
+    const list = document.getElementById('list');
+    const form = document.getElementById('transaction-form');
+    
+    const typeInput = document.getElementById('type');
+    const amountInput = document.getElementById('amount');
+    const categoryInput = document.getElementById('category');
+    const dateInput = document.getElementById('date');
+    const noteInput = document.getElementById('note');
+
+    dateInput.valueAsDate = new Date();
+    let transactions = JSON.parse(localStorage.getItem('transactions')) || [];
+
+    function updateStats() {
+        const now = new Date();
+        const currentMonth = now.getMonth();
+        const currentYear = now.getFullYear();
+
+        const totalBalance = transactions.reduce((acc, item) => {
+            return item.type === 'income' ? acc + item.amount : acc - item.amount;
+        }, 0);
+        balanceDisplay.innerText = `$${totalBalance.toFixed(2)}`;
+
+        const thisMonthTransactions = transactions.filter(t => {
+            const tDate = new Date(t.date);
+            return tDate.getMonth() === currentMonth && tDate.getFullYear() === currentYear;
+        });
+
+        const monthIncome = thisMonthTransactions
+            .filter(t => t.type === 'income')
+            .reduce((acc, t) => acc + t.amount, 0);
+
+        const monthSpend = thisMonthTransactions
+            .filter(t => t.type === 'expense')
+            .reduce((acc, t) => acc + t.amount, 0);
+
+        const leftOver = MONTHLY_BUDGET - monthSpend;
+
+        monthIncomeDisplay.innerText = `$${monthIncome.toFixed(2)}`;
+        monthSpendDisplay.innerText = `$${monthSpend.toFixed(2)}`;
+        monthLeftDisplay.innerText = `$${leftOver.toFixed(2)}`;
+
+        if (monthSpend > MONTHLY_BUDGET) {
+            budgetWarning.style.display = 'block';
+            monthLeftDisplay.classList.add('text-expense');
+        } else {
+            budgetWarning.style.display = 'none';
+            monthLeftDisplay.classList.remove('text-expense');
+        }
+    }
+
+    function addTransactionDOM(transaction) {
+        const item = document.createElement('li');
+        item.classList.add('transaction-item', transaction.type);
+        item.innerHTML = `
+            <div class="item-details">
+                <span class="item-main">${transaction.category}</span>
+                <span class="item-sub">${transaction.date} ${transaction.note ? '• ' + transaction.note : ''}</span>
+            </div>
+            <div class="item-amount-group">
+                <span class="item-amount">${transaction.type === 'income' ? '+' : '-'}$${transaction.amount.toFixed(2)}</span>
+                <span class="delete-btn" onclick="removeTransaction(${transaction.id})">✕</span>
+            </div>
+        `;
+        list.appendChild(item);
+    }
+
+    function removeTransaction(id) {
+        transactions = transactions.filter(t => t.id !== id);
+        localStorage.setItem('transactions', JSON.stringify(transactions));
+        init();
+    }
+
+    function init() {
+        list.innerHTML = '';
+        transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+        transactions.forEach(addTransactionDOM);
+        updateStats();
+    }
+
+    form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const transaction = {
+            id: Date.now(),
+            type: typeInput.value,
+            amount: parseFloat(amountInput.value),
+            category: categoryInput.value,
+            date: dateInput.value,
+            note: noteInput.value
+        };
+        transactions.push(transaction);
+        localStorage.setItem('transactions', JSON.stringify(transactions));
+        init();
+        amountInput.value = '';
+        noteInput.value = '';
+        dateInput.valueAsDate = new Date();
+    });
+
+    function exportData() {
+        const dataStr = JSON.stringify(transactions);
+        const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+        const exportFileDefaultName = 'finance-backup.json';
+        let linkElement = document.createElement('a');
+        linkElement.setAttribute('href', dataUri);
+        linkElement.setAttribute('download', exportFileDefaultName);
+        linkElement.click();
+    }
+
+    function importData(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const importedTransactions = JSON.parse(e.target.result);
+                if (Array.isArray(importedTransactions)) {
+                    transactions = importedTransactions;
+                    localStorage.setItem('transactions', JSON.stringify(transactions));
+                    init();
+                    alert("Data imported successfully!");
+                }
+            } catch (err) { alert("Error reading file."); }
+        };
+        reader.readAsText(file);
+    }
+    init();
+</script>
+</body>
+</html>
+```
+
+### What makes this version "Cozy" and "Mobile-Friendly"?
+
+1.  **The "Warm" Palette:** 
+    *   **Background:** Used a soft cream (`#FDF6EC`) instead of a stark gray or white.
+    *   **Sage Accents:** The main balance card and buttons are now a calming Sage Green.
+    *   **Soft Colors:** Instead of bright red and green, I used "Indian Red" (coral) and "Olive Green" for spending and income.
+    *   **Typography:** Changed the text color to an "Espresso Brown" (`#4A3F35`), which is softer on the eyes than pure black.
+
+2.  **The "Cozy" UI Elements:**
+    *   **Rounded Corners:** I increased the `border-radius` on almost everything. Sharp corners feel "industrial"; rounded corners feel "homey."
+    *   **Soft Shadows:** I added very light, blurry shadows to the cards to make them look like they are gently floating on the page.
+    *   **Animations:** I added a `fadeIn` animation so that when you open the app, it smoothly drifts upward into view.
+
+3.  **Mobile-First Design:**
+    *   **Responsive Grid:** I used `@media (max-width: 400px)`. This tells the browser: *"If the screen is smaller than 400 pixels (like a phone), stop putting things side-by-side and stack them vertically instead."*
+    *   **Finger-Friendly:** I increased the padding on buttons and input fields so they are easier to tap with a thumb.
+    *   **Fluid Width:** The container now uses `width: 100%` with a `max-width`, ensuring it fills the screen on a phone but doesn't look stretched on a laptop.
+
+**Try it out!** Save the file and open it on your computer, or upload it to Netlify and open the link on your phone. It should feel much more like a peaceful home budgeting tool now.

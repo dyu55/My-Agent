@@ -5,8 +5,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
 
-# 小模型优化
-from utils.small_model import ChainOfThoughtPrompts, FallbackStrategy, OutputValidator
+# Small model optimization
+from utils.small_model import ChainOfThoughtPrompts, FallbackStrategy, ModelProfile, OutputValidator
 
 
 class TaskStatus(Enum):
@@ -98,25 +98,35 @@ class TaskPlanner:
 ## Few-shot Examples
 
 Example 1: Simple Task
-Input: "Run tests"
+Input: "Create a hello.py that prints hello world"
 Output:
 {
-  "analysis": "This is a simple single-step task",
+  "analysis": "Simple single-file creation task",
   "subtasks": [
-    {"id": "task_1", "description": "Run pytest tests", "dependencies": []}
+    {"id": "task_1", "description": "Create hello.py with a main() function that prints 'Hello, World!'", "dependencies": []}
   ]
 }
 
-Example 2: Complex Task
-Input: "Create a todo app"
+Example 2: Medium Task
+Input: "Create a CLI todo app with add, list, done, delete commands"
 Output:
 {
-  "analysis": "Need to create a complete frontend and backend application",
+  "analysis": "Need to create a CLI app with argparse and JSON storage",
   "subtasks": [
-    {"id": "task_1", "description": "Design data models"},
-    {"id": "task_2", "description": "Create backend API", "dependencies": ["task_1"]},
-    {"id": "task_3", "description": "Create frontend UI"},
-    {"id": "task_4", "description": "Test and verify", "dependencies": ["task_2", "task_3"]}
+    {"id": "task_1", "description": "Create todo.py with argparse CLI and JSON storage supporting add, list, done, delete commands", "dependencies": []},
+    {"id": "task_2", "description": "Create test_todo.py with pytest tests for all commands", "dependencies": ["task_1"]}
+  ]
+}
+
+Example 3: Complex Task
+Input: "Create a full REST API with user auth, database, and tests"
+Output:
+{
+  "analysis": "Multi-file project with database, API, auth, and tests",
+  "subtasks": [
+    {"id": "task_1", "description": "Create database models and schema", "dependencies": []},
+    {"id": "task_2", "description": "Create REST API endpoints with authentication", "dependencies": ["task_1"]},
+    {"id": "task_3", "description": "Create tests for all endpoints", "dependencies": ["task_2"]}
   ]
 }
 
@@ -125,29 +135,31 @@ You must return a JSON object with these fields:
 - "analysis": Your understanding of the task
 - "subtasks": List of subtasks, each containing:
   - "id": Unique identifier (e.g., "task_1")
-  - "description": Clear subtask description
+  - "description": Clear, actionable subtask description (include what file to create and what it should contain)
   - "dependencies": List of task IDs this depends on (default: empty)
 
 ## Rules
-1. Subtasks should be atomic and independent
-2. Consider dependencies between tasks
-3. Initial tasks should include understanding project state
-4. Final tasks should include verification and testing
+1. For simple tasks (single file, single function), use EXACTLY 1 subtask — do NOT over-decompose
+2. NEVER create "analyze project structure" or "understand codebase" subtasks — just write the code directly
+3. Each subtask should produce tangible output (a file, a function, a test)
+4. Keep subtask descriptions specific: mention file names, function names, and key requirements
+5. For multi-file projects, group related code into fewer, larger subtasks rather than many small ones
 
 Now analyze this task:
 """
 
-    def __init__(self, llm_client: Any):
+    def __init__(self, llm_client: Any, model_profile: ModelProfile | None = None):
         self.llm = llm_client
+        self.model_profile = model_profile
         self.cot = ChainOfThoughtPrompts()
         self.validator = OutputValidator()
 
-        # 创建降级策略（用于 JSON 解析失败时）
+        # Create fallback strategy (for JSON parse failures)
         self.fallback = FallbackStrategy(self._llm_call)
 
     def _llm_call(self, prompt: str) -> str:
-        """LLM 调用包装器。"""
-        return self.llm.chat(prompt)
+        """LLM call wrapper (uses think model)."""
+        return self.llm.chat_think(prompt)
 
     def create_plan(self, task: str, context: str = "") -> ExecutionPlan:
         """
@@ -162,12 +174,15 @@ Now analyze this task:
         Returns:
             ExecutionPlan with decomposed subtasks
         """
-        prompt = self.PLANNING_PROMPT
-        if context:
-            prompt += f"\n\n## 当前项目状态\n{context}"
-        prompt += f"\n\n## 任务\n{task}"
+        if self.model_profile and self.model_profile.prefer_short_prompts:
+            prompt = self._build_short_planning_prompt(task, context)
+        else:
+            prompt = self.PLANNING_PROMPT
+            if context:
+                prompt += f"\n\n## Current Project State\n{context}"
+            prompt += f"\n\n## Task\n{task}"
 
-        # 使用降级策略解析 JSON
+        # Use fallback strategy to parse JSON
         result = self.fallback.execute_with_fallback(
             prompt,
             schema={
@@ -193,7 +208,7 @@ Now analyze this task:
 
         plan = ExecutionPlan(main_goal=task)
 
-        # 如果降级策略成功，解析数据
+        # If fallback strategy succeeded, parse data
         if result.success and result.data:
             for task_data in result.data.get("subtasks", []):
                 plan.subtasks.append(
@@ -205,11 +220,25 @@ Now analyze this task:
                 )
             return plan
 
-        # 如果所有策略都失败，返回默认计划
+        # If all strategies failed, return default plan
         return ExecutionPlan(
             main_goal=task,
             subtasks=[SubTask(id="task_1", description=task)],
         )
+
+    def _build_short_planning_prompt(self, task: str, context: str) -> str:
+        """Build a compressed planning prompt for small models (8B/9B)."""
+        prompt = f"""Break this task into subtasks. For simple tasks use 1 subtask. NO analysis steps. Return JSON.
+
+Task: {task}
+"""
+        if context:
+            prompt += f"Files: {context[:500]}\n"
+
+        prompt += """
+Example for simple task: {{"subtasks":[{{"id":"task_1","description":"Create hello.py with print('hello')","dependencies":[]}}]}}
+Return JSON:"""
+        return prompt
 
     def revise_plan(
         self,
@@ -263,7 +292,7 @@ Output format:
 """
 
         if llm_context:
-            prompt += f"\n\n上下文:\n{llm_context}"
+            prompt += f"\n\nContext:\n{llm_context}"
 
         try:
             response = self.llm.chat(prompt)
@@ -290,8 +319,8 @@ Output format:
 
     def get_task_summary(self, plan: ExecutionPlan) -> str:
         """Get a human-readable summary of the plan."""
-        lines = [f"## 执行计划: {plan.main_goal}\n"]
-        lines.append(f"共 {len(plan.subtasks)} 个子任务:\n")
+        lines = [f"## Execution Plan: {plan.main_goal}\n"]
+        lines.append(f"Total {len(plan.subtasks)} subtasks:\n")
 
         for i, task in enumerate(plan.subtasks, 1):
             status_icon = {
@@ -302,7 +331,7 @@ Output format:
                 TaskStatus.BLOCKED: "🚫",
             }.get(task.status, "❓")
 
-            deps = f" (依赖: {', '.join(task.dependencies)})" if task.dependencies else ""
+            deps = f" (deps: {', '.join(task.dependencies)})" if task.dependencies else ""
             lines.append(f"{i}. {status_icon} {task.description}{deps}")
 
         return "\n".join(lines)

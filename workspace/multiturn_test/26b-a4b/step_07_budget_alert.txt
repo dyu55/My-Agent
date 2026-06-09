@@ -1,0 +1,432 @@
+这已经完全进入了“专业级财务应用”的逻辑了！你现在要求的不是简单的“总额预警”，而是**“精细化预算管理”**。
+
+为了实现这个功能，我们需要在逻辑上做一个巨大的转变：
+1.  **引入“预算配置”数据结构**：我们要新增一个专门存储“每个类别预算是多少”的对象，并把它也存进 `localStorage`。
+2.  **新增“预算设置”界面**：用户需要一个地方来输入和修改这些数字。
+3.  **多维度预警逻辑**：
+    *   **总预算预警**（你之前已经有的）。
+    *   **分类预警**：程序要对比“本月该类别的实际支出” vs “该类别的设定预算”。
+4.  **动态警告列表**：如果某个类别超支了，我们就在页面上弹出一个醒目的“警告列表”。
+
+由于功能变复杂了，我把代码进行了模块化处理，让它看起来整洁且易于维护。
+
+请直接用下面的代码**覆盖**你的 `index.html`：
+
+```html
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>温馨家账本 - 精细预算版</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root {
+            --bg-color: #fdfbf7;
+            --card-bg: #ffffff;
+            --primary-color: #7da684;
+            --secondary-color: #e9967a;
+            --text-main: #4a4a4a;
+            --text-sub: #8e8e8e;
+            --danger: #e74c3c;
+            --shadow: 0 10px 30px rgba(0,0,0,0.05);
+        }
+
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { font-family: -apple-system, sans-serif; background-color: var(--bg-color); color: var(--text-main); margin: 0; padding: 0; display: flex; justify-content: center; }
+        .container { width: 100%; max-width: 480px; padding: 20px; padding-bottom: 100px; }
+        h2 { text-align: center; font-weight: 600; color: var(--primary-color); margin-bottom: 20px; }
+
+        .card { background: var(--card-bg); border-radius: 24px; padding: 20px; box-shadow: var(--shadow); margin-bottom: 20px; }
+        
+        /* 总资产卡片 */
+        .balance-card { background: linear-gradient(135deg, #a8c69f, #7da684); color: white; text-align: center; }
+        .balance-card div { font-size: 14px; opacity: 0.9; }
+        .balance-card h1 { font-size: 36px; margin: 0; }
+
+        /* 统计与警告区域 */
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .stat-item { text-align: center; }
+        .stat-label { font-size: 12px; color: var(--text-sub); margin-bottom: 4px; }
+        .stat-value { font-size: 18px; font-weight: bold; }
+        .amount-plus { color: #5ba37a; }
+        .amount-minus { color: var(--secondary-color); }
+
+        /* --- 新增：分类预警列表样式 --- */
+        #warning-area { margin-top: 15px; }
+        .warning-item { 
+            background: #fff5f5; color: var(--danger); padding: 10px 15px; 
+            border-radius: 12px; margin-bottom: 8px; font-size: 14px; 
+            font-weight: bold; border-left: 4px solid var(--danger);
+            animation: shake 0.5s ease-in-out infinite;
+        }
+        @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-3px); } 75% { transform: translateX(3px); } }
+
+        /* --- 新增：预算设置区域样式 --- */
+        .budget-setting-item { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+        .budget-setting-item label { margin: 0; flex: 1; font-size: 14px; }
+        .budget-setting-item input { width: 100px; padding: 8px; margin-left: 10px; font-size: 14px; }
+
+        /* 图表 */
+        .chart-container { position: relative; height: 200px; width: 100%; margin-top: 10px; }
+
+        /* 表单 */
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 8px; font-size: 14px; font-weight: 500; }
+        input, select { width: 100%; padding: 14px; border: 1.5px solid #f0f0f0; border-radius: 16px; font-size: 16px; background-color: #fafafa; outline: none; }
+        input:focus { border-color: var(--primary-color); }
+        .btn-submit { width: 100%; padding: 16px; background-color: var(--primary-color); color: white; border: none; border-radius: 16px; font-size: 18px; font-weight: 600; }
+
+        .backup-group { display: flex; gap: 10px; margin-bottom: 20px; }
+        .btn-small { flex: 1; padding: 10px; font-size: 12px; background: #eee; border: none; border-radius: 12px; color: var(--text-sub); }
+
+        /* 列表 */
+        .list-title { font-size: 18px; margin: 30px 0 15px 10px; color: var(--text-main); }
+        ul { list-style: none; padding: 0; }
+        li { background: var(--card-bg); border-radius: 18px; padding: 15px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; box-shadow: 0 2px 10px rgba(0,0,0,0.02); }
+        .record-cat { font-size: 13px; font-weight: 600; color: var(--primary-color); }
+        .record-date { font-size: 11px; color: var(--text-sub); }
+        .record-note { font-size: 13px; color: var(--text-main); margin-top: 4px; }
+        .amount-val { font-weight: bold; font-size: 16px; }
+        .del-icon { color: #ddd; font-size: 20px; margin-left: 10px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>🏡 温馨家账本</h2>
+
+    <!-- 1. 总资产 -->
+    <div class="card balance-card">
+        <div>当前家庭总资产</div>
+        <h1 id="total-balance">¥ 0.00</h1>
+    </div>
+
+    <!-- 2. 统计与预警 -->
+    <div class="card">
+        <div class="stats-grid">
+            <div class="stat-item">
+                <div class="stat-label">本月收入 💰</div>
+                <div id="month-income" class="stat-value amount-plus">¥ 0.00</div>
+            </div>
+            <div class="stat-item">
+                <div class="stat-label">本月支出 🛒</div>
+                <div id="month-expense" class="stat-value amount-minus">¥ 0.00</div>
+            </div>
+        </div>
+
+        <!-- 预警展示区 -->
+        <div id="warning-area"></div>
+
+        <div style="margin-top: 15px; padding-top: 15px; border-top: 1px dashed #eee; display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 14px; color: var(--text-sub);">本月总预算剩余:</span>
+            <span id="month-remaining" style="font-weight: bold; font-size: 18px;">¥ 5000.00</span>
+        </div>
+    </div>
+
+    <!-- 3. 消费分布图表 -->
+    <div class="card">
+        <div class="stat-label" style="text-align: center; margin-bottom: 10px;">支出构成分析 📊</div>
+        <div class="chart-container">
+            <canvas id="categoryChart"></canvas>
+        </div>
+    </div>
+
+    <!-- 4. 【新增】预算设置卡片 -->
+    <div class="card">
+        <div class="stat-label" style="margin-bottom: 15px; font-weight: bold;">⚙️ 分类预算设置</div>
+        <div id="budget-settings-list">
+            <!-- 预算设置项会通过 JS 自动生成 -->
+        </div>
+        <button class="btn-submit" style="margin-top:10px; padding: 10px; font-size: 14px;" onclick="saveBudgets()">保存预算设置</button>
+    </div>
+
+    <!-- 5. 备份工具 -->
+    <div class="backup-group">
+        <button class="btn-small" onclick="exportData()">💾 备份数据</button>
+        <button class="btn-small" onclick="document.getElementById('file-input').click()">📂 恢复数据</button>
+        <input type="file" id="file-input" accept=".json" onchange="importData(event)" style="display:none">
+    </div>
+
+    <!-- 6. 输入表单 -->
+    <div class="card">
+        <div class="form-group">
+            <label>金额 (支出请写负数)</label>
+            <input type="number" id="amount" placeholder="0.00">
+        </div>
+        <div class="form-group">
+            <label>类别</label>
+            <select id="category">
+                <option value="🍎 餐饮">🍎 餐饮</option>
+                <option value="🚗 交通">🚗 交通</option>
+                <option value="🛍️ 购物">🛍️ 购物</option>
+                <option value="💵 工资">💵 工资</option>
+                <option value="🎬 娱乐">🎬 娱乐</option>
+                <option value="🏠 居家">🏠 居家</option>
+                <option value="✨ 其他">✨ 其他</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>日期</label>
+            <input type="date" id="date">
+        </div>
+        <div class="form-group">
+            <label>备注</label>
+            <input type="text" id="note" placeholder="写点什么...">
+        </div>
+        <button class="btn-submit" onclick="addTransaction()">确认记账</button>
+    </div>
+
+    <div class="list-title">📝 最近记录</div>
+    <ul id="transaction-list"></ul>
+</div>
+
+<script>
+    /* --- JavaScript 逻辑 --- */
+
+    // 预设的类别和默认预算
+    const DEFAULT_CATEGORIES = ["🍎 餐饮", "🚗 交通", "🛍️ 购物", "💵 工资", "🎬 娱乐", "🏠 居家", "✨ 其他"];
+    const DEFAULT_BUDGETS = { "🍎 餐饮": 1500, "🚗 交通": 500, "🛍️ 购物": 1000, "💵 工资": 0, "🎬 娱乐": 300, "🏠 居家": 500, "✨ 其他": 200 };
+
+    const list = document.getElementById('transaction-list');
+    const balanceDisplay = document.getElementById('total-balance');
+    const mIncomeDisplay = document.getElementById('month-income');
+    const mExpenseDisplay = document.getElementById('month-expense');
+    const mRemainingDisplay = document.getElementById('month-remaining');
+    const warningArea = document.getElementById('warning-area');
+    const budgetSettingsList = document.getElementById('budget-settings-list');
+    
+    const amountInput = document.getElementById('amount');
+    const categoryInput = document.getElementById('category');
+    const dateInput = document.getElementById('date');
+    const noteInput = document.getElementById('note');
+
+    const TOTAL_MONTHLY_BUDGET = 5000; // 总月预算
+
+    // 数据加载
+    let transactions = JSON.parse(localStorage.getItem('myFinanceData')) || [];
+    let budgets = JSON.parse(localStorage.getItem('myCategoryBudgets')) || { ...DEFAULT_BUDGETS };
+    
+    let myChart = null;
+
+    window.onload = function() {
+        const today = new Date().toISOString().split('T')[0];
+        dateInput.value = today;
+        renderBudgetSettings(); // 初始化预算设置界面
+        init();
+    };
+
+    // 渲染预算设置界面
+    function renderBudgetSettings() {
+        budgetSettingsList.innerHTML = '';
+        DEFAULT_CATEGORIES.forEach(cat => {
+            const div = document.createElement('div');
+            div.className = 'budget-setting-item';
+            div.innerHTML = `
+                <label>${cat}</label>
+                <input type="number" class="budget-input" data-category="${cat}" value="${budgets[cat] || 0}">
+            `;
+            budgetSettingsList.appendChild(div);
+        });
+    }
+
+    // 保存预算
+    function saveBudgets() {
+        const inputs = document.querySelectorAll('.budget-input');
+        inputs.forEach(input => {
+            const cat = input.getAttribute('data-category');
+            budgets[cat] = parseFloat(input.value) || 0;
+        });
+        localStorage.setItem('myCategoryBudgets', JSON.stringify(budgets));
+        init(); // 重新计算并刷新界面
+        alert('预算设置已保存！');
+    }
+
+    function init() {
+        list.innerHTML = '';
+        warningArea.innerHTML = ''; // 清空警告
+        
+        let totalAll = 0;
+        let monthIncome = 0;
+        let monthExpense = 0;
+        
+        // 用于统计分类支出的对象
+        const categoryExpenses = {};
+        // 用于存放超支的警告消息
+        const warnings = [];
+
+        const now = new Date();
+        const currentMonthStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+
+        transactions.sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        transactions.forEach((t, index) => {
+            totalAll += t.amount;
+            
+            if (t.date.startsWith(currentMonthStr)) {
+                if (t.amount > 0) {
+                    monthIncome += t.amount;
+                } else {
+                    const absAmount = Math.abs(t.amount);
+                    monthExpense += absAmount;
+                    categoryExpenses[t.category] = (categoryExpenses[t.category] || 0) + absAmount;
+                }
+            }
+
+            // 渲染列表项
+            const li = document.createElement('li');
+            const isPlus = t.amount >= 0;
+            li.innerHTML = `
+                <div class="record-left">
+                    <div class="record-cat">${t.category}</div>
+                    <div class="record-date">${t.date}</div>
+                    ${t.note ? `<div class="record-note">${t.note}</div>` : ''}
+                </div>
+                <div class="record-right">
+                    <span class="amount-val ${isPlus ? 'amount-plus' : 'amount-minus'}">${isPlus ? '+' : ''}${t.amount.toFixed(2)}</span>
+                    <span class="del-icon" onclick="deleteTransaction(${index})">&times;</span>
+                </div>
+            `;
+            list.appendChild(li);
+        });
+
+        // --- 核心逻辑：检查分类预算是否超支 ---
+        for (const cat in budgets) {
+            const spent = categoryExpenses[cat] || 0;
+            const limit = budgets[cat];
+            // 只有当预算大于0且实际支出大于预算时，才触发警告
+            if (limit > 0 && spent > limit) {
+                warnings.push(`⚠️ ${cat} 已超支! (已花 ${spent.toFixed(0)} / 预算 ${limit})`);
+            }
+        }
+
+        // 如果总预算也超了
+        if (monthExpense > TOTAL_MONTHLY_BUDGET) {
+            warnings.unshift(`🚨 总预算已超支! (已花 ${monthExpense.toFixed(0)})`);
+        }
+
+        // 显示警告
+        warnings.forEach(msg => {
+            const div = document.createElement('div');
+            div.className = 'warning-item';
+            div.innerText = msg;
+            warningArea.appendChild(div);
+        });
+
+        // 更新文字
+        balanceDisplay.innerText = `¥ ${totalAll.toFixed(2)}`;
+        mIncomeDisplay.innerText = `¥ ${monthIncome.toFixed(2)}`;
+        mExpenseDisplay.innerText = `¥ ${monthExpense.toFixed(2)}`;
+        
+        const remaining = TOTAL_MONTHLY_BUDGET - monthExpense;
+        mRemainingDisplay.innerText = `¥ ${remaining.toFixed(2)}`;
+        mRemainingDisplay.style.color = remaining < 0 ? 'var(--danger)' : 'var(--text-main)';
+
+        // 更新图表
+        updateChart(categoryExpenses);
+
+        localStorage.setItem('myFinanceData', JSON.stringify(transactions));
+    }
+
+    function updateChart(categoryMap) {
+        const ctx = document.getElementById('categoryChart').getContext('2d');
+        const labels = Object.keys(categoryMap);
+        const dataValues = Object.values(categoryMap);
+
+        if (myChart) myChart.destroy();
+        if (labels.length === 0) return;
+
+        myChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: labels,
+                datasets: [{
+                    data: dataValues,
+                    backgroundColor: ['#7da684', '#e9967a', '#f4d03f', '#5dade2', '#af7ac5', '#ec7063', '#aab7b8'],
+                    borderWidth: 0
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, padding: 15, font: { size: 11 } } } },
+                cutout: '65%'
+            }
+        });
+    }
+
+    function addTransaction() {
+        const amount = parseFloat(amountInput.value);
+        const category = categoryInput.value;
+        const date = dateInput.value;
+        const note = noteInput.value;
+        if (isNaN(amount) || date === '') { alert('请填写金额和日期哦~'); return; }
+        transactions.push({ amount, category, date, note });
+        amountInput.value = ''; noteInput.value = '';
+        init();
+    }
+
+    function deleteTransaction(index) {
+        if(confirm('确定要删除吗？')) { transactions.splice(index, 1); init(); }
+    }
+
+    function exportData() {
+        const dataStr = JSON.stringify({ transactions, budgets }, null, 2);
+        const blob = new Blob([dataStr], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `家账本备份_${new Date().toLocaleDateString()}.json`;
+        link.click();
+    }
+
+    function importData(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const imported = JSON.parse(e.target.result);
+                if (confirm('导入将覆盖当前所有数据，确定吗？')) {
+                    if (imported.transactions) transactions = imported.transactions;
+                    if (imported.budgets) budgets = imported.budgets;
+                    init();
+                    renderBudgetSettings();
+                    alert('恢复成功！');
+                }
+            } catch (err) { alert('文件错误'); }
+        };
+        reader.readAsText(file);
+    }
+</script>
+
+</body>
+</html>
+```
+
+### 🌟 本次升级的核心变化：
+
+#### 1. 建立“预算管理系统”
+*   **新增卡片**：我在页面中间增加了一个“⚙️ 分类预算设置”卡片。
+*   **可编辑性**：你可以直接在每个分类后面输入数字（比如餐饮输入 1500）。
+*   **持久化存储**：点击“保存预算设置”后，这些数字会存入 `localStorage`。即使你关掉浏览器，下次打开时，你的预算设置依然还在。
+
+#### 2. 强大的“多级预警”逻辑
+现在的程序在每次记账时，会进行两轮“安检”：
+*   **第一轮（分类安检）**：它会对比“🍎 餐饮”实际花了多少钱 vs 你设定的“🍎 餐饮”预算。如果超了，它会生成一个像下面这样的警告：
+    > `⚠️ 🍎 餐饮 已超支! (已花 1600 / 预算 1500)`
+*   **第二轮（总额安检）**：它会看你这个月的总支出是否超过了总预算（5000）。
+*   **展示方式**：所有的警告都会放在“统计卡片”下方，并带有一个**红色闪烁效果**，确保你一眼就能看到哪里出问题了。
+
+#### 3. 数据备份的升级
+*   因为现在你的数据不仅包含“账单”，还包含了“预算设置”，所以我升级了备份逻辑。当你点击“备份数据”时，它会把**账单+预算**一起打包成一个文件。
+*   当你“恢复数据”时，所有的设置也会一起恢复。
+
+### 🧪 测验一下你的新功能：
+
+1.  **设置预算**：找到“分类预算设置”，把“🍎 餐饮”改为 `100`。点击“保存预算设置”。
+2.  **制造超支**：添加一笔记录：金额 `-150`，类别“🍎 餐饮”。
+3.  **查看结果**：看页面上方，是不是出现了一个红色的、闪烁的警告，告诉你餐饮已经超支了？
+4.  **测试自动恢复**：刷新页面，看警告是不是还在？（它应该还在，因为数据已经存进去了）。
+
+**恭喜你！你现在已经亲手写出了一个具备“预算控制”功能的专业级个人财务管理工具。你觉得这个工具现在已经可以让你在日常生活中使用了吗？**

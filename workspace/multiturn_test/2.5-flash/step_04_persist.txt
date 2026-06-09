@@ -1,0 +1,298 @@
+你发现的问题非常重要！而且你提出的解决方案——“存到浏览器里面”——正是我们实现数据持久化的最佳方式，无需服务器就能在你的本地浏览器上使用。
+
+我们需要使用浏览器的 **`localStorage`** 功能。它允许网页在用户浏览器中存储少量数据（键值对），这些数据即使在浏览器关闭后也依然存在，直到用户手动清除或者网站代码清除。
+
+---
+
+### **如何使用 `localStorage`？**
+
+我们将对 JavaScript 代码进行修改，使其在以下关键时刻与 `localStorage` 交互：
+
+1.  **页面加载时：** 从 `localStorage` 中读取之前保存的所有交易记录。
+2.  **添加/删除记录时：** 将更新后的交易记录保存回 `localStorage`。
+
+---
+
+### **修改 JavaScript 代码**
+
+你只需要替换 `index.html` 文件中的整个 `<script>` 标签内的内容。我已经为你整合了 `localStorage` 的逻辑。
+
+请用以下代码替换你 `index.html` 文件中所有的 `<script>` 标签内容：
+
+```html
+<script>
+    // 全局变量，用于存储所有交易记录
+    let transactions = [];
+    // 每月预算，你可以修改这个值
+    const MONTHLY_BUDGET = 5000; 
+
+    // 获取DOM元素
+    const balanceDisplay = document.getElementById('current-balance');
+    const transactionForm = document.getElementById('transaction-form');
+    const transactionsBody = document.getElementById('transactions-body');
+    const dateInput = document.getElementById('date');
+
+    // 月度统计元素
+    const monthlyIncomeDisplay = document.getElementById('monthly-income');
+    const monthlyExpenseDisplay = document.getElementById('monthly-expense');
+    const monthlyBalanceDisplay = document.getElementById('monthly-balance');
+    const budgetAlert = document.getElementById('budget-alert');
+
+    // --- 辅助函数 ---
+
+    // 格式化金额，保留两位小数
+    function formatAmount(amount) {
+        return parseFloat(amount).toFixed(2);
+    }
+
+    // 获取当前月份的字符串，格式为 YYYY-MM
+    function getCurrentMonthString() {
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0'); // getMonth() 返回 0-11
+        return `${year}-${month}`;
+    }
+
+    // --- 数据操作与存储 (核心修改点) ---
+
+    // 从 localStorage 加载交易记录
+    function loadTransactions() {
+        const storedTransactions = localStorage.getItem('transactions');
+        if (storedTransactions) {
+            transactions = JSON.parse(storedTransactions);
+        } else {
+            transactions = []; // 如果没有数据，初始化为空数组
+        }
+    }
+
+    // 保存交易记录到 localStorage
+    function saveTransactions() {
+        localStorage.setItem('transactions', JSON.stringify(transactions));
+    }
+
+    // --- 核心功能函数 ---
+
+    // 计算并显示总余额
+    function updateBalance() {
+        let totalBalance = 0;
+        transactions.forEach(transaction => {
+            if (transaction.type === 'income') {
+                totalBalance += transaction.amount;
+            } else {
+                totalBalance -= transaction.amount;
+            }
+        });
+        balanceDisplay.textContent = formatAmount(totalBalance);
+    }
+
+    // 渲染交易列表
+    function renderTransactions() {
+        transactionsBody.innerHTML = ''; // 清空现有列表
+        transactions.forEach((transaction, index) => {
+            const row = transactionsBody.insertRow();
+            const typeCell = row.insertCell(0);
+            const amountCell = row.insertCell(1);
+            const categoryCell = row.insertCell(2);
+            const dateCell = row.insertCell(3);
+            const descriptionCell = row.insertCell(4);
+            const actionCell = row.insertCell(5);
+
+            typeCell.textContent = transaction.type === 'income' ? '收入' : '支出';
+            typeCell.style.color = transaction.type === 'income' ? '#28a745' : '#dc3545'; // 收入绿色，支出红色
+            
+            amountCell.textContent = formatAmount(transaction.amount);
+            amountCell.style.color = transaction.type === 'income' ? '#28a745' : '#dc3545';
+
+            categoryCell.textContent = transaction.category;
+            dateCell.textContent = transaction.date;
+            descriptionCell.textContent = transaction.description;
+
+            const deleteButton = document.createElement('button');
+            deleteButton.textContent = '删除';
+            deleteButton.classList.add('delete-btn'); // 添加一个类，方便样式控制
+            deleteButton.onclick = () => deleteTransaction(index);
+            actionCell.appendChild(deleteButton);
+        });
+    }
+
+    // 删除交易记录
+    function deleteTransaction(index) {
+        if (confirm('确定要删除这笔记录吗？')) {
+            transactions.splice(index, 1); // 从数组中删除
+            saveTransactions(); // 删除后保存
+            initApp(); // 重新加载和更新所有数据
+        }
+    }
+
+    // 计算并显示月度统计
+    function updateMonthlySummary() {
+        const currentMonth = getCurrentMonthString();
+        let monthlyIncome = 0;
+        let monthlyExpense = 0;
+
+        transactions.forEach(transaction => {
+            // 检查交易日期是否属于当前月份
+            if (transaction.date.startsWith(currentMonth)) {
+                if (transaction.type === 'income') {
+                    monthlyIncome += transaction.amount;
+                } else {
+                    monthlyExpense += transaction.amount;
+                }
+            }
+        });
+
+        const monthlyBalance = monthlyIncome - monthlyExpense;
+        const remainingBudget = MONTHLY_BUDGET - monthlyExpense;
+
+        monthlyIncomeDisplay.textContent = formatAmount(monthlyIncome);
+        monthlyExpenseDisplay.textContent = formatAmount(monthlyExpense);
+        monthlyBalanceDisplay.textContent = formatAmount(monthlyBalance);
+
+        // 预算提醒
+        budgetAlert.classList.remove('over', 'within'); // 清除之前的样式
+        if (remainingBudget < 0) {
+            budgetAlert.textContent = `🚨 预算超支 ${formatAmount(Math.abs(remainingBudget))} 元！请注意。`;
+            budgetAlert.classList.add('over');
+        } else {
+            budgetAlert.textContent = `本月预算剩余 ${formatAmount(remainingBudget)} 元。`;
+            budgetAlert.classList.add('within');
+        }
+    }
+
+    // 根据选择的类型更新类别下拉框的可用选项
+    function updateCategoryOptions(type) {
+        const categorySelect = document.getElementById('category');
+        const currentSelectedValue = categorySelect.value;
+        
+        Array.from(categorySelect.children).forEach(optgroup => {
+            if (optgroup.tagName === 'OPTGROUP') {
+                if (optgroup.label === '收入' && type === 'expense') {
+                    optgroup.style.display = 'none';
+                } else if (optgroup.label === '支出' && type === 'income') {
+                    optgroup.style.display = 'none';
+                } else {
+                    optgroup.style.display = ''; // 显示对应类别
+                }
+            }
+        });
+
+        // 检查之前选中的值是否在当前可见的类别中
+        // 如果不在，则尝试选中第一个可见的类别
+        let foundCurrent = false;
+        for (let i = 0; i < categorySelect.options.length; i++) {
+            const option = categorySelect.options[i];
+            if (option.value === currentSelectedValue && option.parentNode.style.display !== 'none') {
+                foundCurrent = true;
+                break;
+            }
+        }
+        
+        if (!foundCurrent) {
+            for (let i = 0; i < categorySelect.options.length; i++) {
+                const option = categorySelect.options[i];
+                if (option.parentNode.style.display !== 'none') {
+                    categorySelect.selectedIndex = i;
+                    break;
+                }
+            }
+        }
+    }
+
+
+    // --- 事件监听 ---
+
+    // 表单提交处理
+    transactionForm.addEventListener('submit', (event) => {
+        event.preventDefault(); // 阻止表单默认提交行为（页面刷新）
+
+        const type = document.querySelector('input[name="transaction-type"]:checked').value;
+        const amount = parseFloat(document.getElementById('amount').value);
+        const category = document.getElementById('category').value;
+        const date = document.getElementById('date').value;
+        const description = document.getElementById('description').value.trim();
+
+        if (isNaN(amount) || amount <= 0) {
+            alert('请输入有效的金额！');
+            return;
+        }
+
+        const newTransaction = {
+            type,
+            amount,
+            category,
+            date,
+            description,
+            id: Date.now() // 为每笔交易生成一个唯一ID，方便将来操作
+        };
+
+        transactions.push(newTransaction);
+        saveTransactions(); // 添加后保存
+        transactionForm.reset(); // 清空表单
+        // 重置类型选择和类别
+        document.getElementById('type-income').checked = true;
+        updateCategoryOptions('income');
+        // 重新设置日期为今天
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        dateInput.value = `${year}-${month}-${day}`;
+
+        initApp(); // 重新加载和更新所有数据
+    });
+
+    // 监听类型（收入/支出）选择的变化
+    document.querySelectorAll('input[name="transaction-type"]').forEach(radio => {
+        radio.addEventListener('change', (event) => {
+            updateCategoryOptions(event.target.value);
+        });
+    });
+
+    // --- 初始化函数 ---
+
+    // 应用初始化
+    function initApp() {
+        loadTransactions();      // 1. 加载所有记录 (首先加载)
+        updateBalance();         // 2. 更新总余额
+        renderTransactions();    // 3. 渲染交易列表
+        updateMonthlySummary();  // 4. 更新月度统计和预算提醒
+    }
+
+    // 页面加载完成后执行
+    document.addEventListener('DOMContentLoaded', () => {
+        // 设置日期输入框的默认值为今天
+        const today = new Date();
+        const year = today.getFullYear();
+        const month = String(today.getMonth() + 1).padStart(2, '0');
+        const day = String(today.getDate()).padStart(2, '0');
+        dateInput.value = `${year}-${month}-${day}`;
+        
+        // 默认选中收入，并根据类型调整类别选择
+        document.getElementById('type-income').checked = true;
+        updateCategoryOptions('income');
+
+        initApp(); // 启动应用
+    });
+</script>
+```
+
+---
+
+### **操作步骤：**
+
+1.  打开你的 `index.html` 文件（用文本编辑器）。
+2.  找到 `<script>` 标签（通常在 `</body>` 标签之前）。
+3.  将 `<script>` 标签内的所有旧代码删除。
+4.  将上面提供的新 JavaScript 代码完全复制粘贴到 `<script>` 标签内。
+5.  保存 `index.html` 文件。
+6.  在浏览器中打开（或刷新） `index.html` 文件。
+
+### **现在，你可以测试一下：**
+
+1.  添加几条收入和支出记录。
+2.  关闭浏览器，或者关闭 `index.html` 标签页。
+3.  重新打开 `index.html` 文件。
+
+你会发现你之前添加的所有记录都还在，并且总余额、月度统计也都是正确的！
+
+现在，你的个人财务管理工具已经具备了基本的本地数据持久化功能了！

@@ -1,6 +1,6 @@
-"""小模型适配工具 - Phase 3
+"""Small model adaptation utilities - Phase 3
 
-为 8B/9B 等小模型优化的提示模板和降级策略。
+Prompt templates and fallback strategies optimized for 8B/9B models.
 """
 
 import json
@@ -9,9 +9,125 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 
+@dataclass(frozen=True)
+class ModelProfile:
+    """
+    Model size profile for adaptive behavior.
+
+    Detects model size from name and provides appropriate limits
+    for context, prompts, and memory management.
+    """
+
+    size_category: str  # "small" (8B/9B), "medium" (26B/31B), "large" (70B+)
+    param_billions: float
+    max_context_tokens: int
+    max_file_context_files: int
+    max_prompt_chars: int
+    max_history_messages: int
+    prefer_short_prompts: bool
+
+    @classmethod
+    def from_model_name(cls, model_name: str) -> "ModelProfile":
+        """Detect model size from name and create appropriate profile."""
+        name_lower = model_name.lower()
+
+        # Extract parameter count from common patterns
+        param_b = cls._extract_param_size(name_lower)
+
+        if param_b <= 10:
+            return cls._small_profile(param_b)
+        elif param_b <= 35:
+            return cls._medium_profile(param_b)
+        else:
+            return cls._large_profile(param_b)
+
+    @staticmethod
+    def _extract_param_size(name: str) -> float:
+        """Extract parameter size in billions from model name."""
+        # Match patterns like "8b", "9b", "26b", "31b", "70b", "7b"
+        match = re.search(r"(\d+(?:\.\d+)?)\s*b", name)
+        if match:
+            return float(match.group(1))
+
+        # Match patterns like "0.5b", "1.5b"
+        match = re.search(r"(\d+\.\d+)\s*b", name)
+        if match:
+            return float(match.group(1))
+
+        # Known model name mappings
+        known_sizes = {
+            "tiny": 1, "mini": 3, "small": 7,
+            "gemma": 9, "qwen": 9, "phi": 3,
+            "mistral": 7, "codellama": 7,
+            "llama3": 8, "llama-3": 8,
+            "deepseek": 16, "yi": 6,
+        }
+        for key, size in known_sizes.items():
+            if key in name:
+                return size
+
+        # Default to medium if unknown
+        return 14
+
+    @staticmethod
+    def _small_profile(param_b: float) -> "ModelProfile":
+        """Profile for 8B/9B models."""
+        return ModelProfile(
+            size_category="small",
+            param_billions=param_b,
+            max_context_tokens=4096,
+            max_file_context_files=10,
+            max_prompt_chars=2000,
+            max_history_messages=5,
+            prefer_short_prompts=True,
+        )
+
+    @staticmethod
+    def _medium_profile(param_b: float) -> "ModelProfile":
+        """Profile for 26B/31B models."""
+        return ModelProfile(
+            size_category="medium",
+            param_billions=param_b,
+            max_context_tokens=8192,
+            max_file_context_files=25,
+            max_prompt_chars=4000,
+            max_history_messages=10,
+            prefer_short_prompts=False,
+        )
+
+    @staticmethod
+    def _large_profile(param_b: float) -> "ModelProfile":
+        """Profile for 70B+ models."""
+        return ModelProfile(
+            size_category="large",
+            param_billions=param_b,
+            max_context_tokens=32768,
+            max_file_context_files=50,
+            max_prompt_chars=8000,
+            max_history_messages=20,
+            prefer_short_prompts=False,
+        )
+
+
+# Global cache for model profiles
+_profile_cache: dict[str, ModelProfile] = {}
+
+
+def get_model_profile(model_name: str) -> ModelProfile:
+    """Get or create a cached ModelProfile for the given model name."""
+    if model_name not in _profile_cache:
+        _profile_cache[model_name] = ModelProfile.from_model_name(model_name)
+    return _profile_cache[model_name]
+
+
+def clear_profile_cache() -> None:
+    """Clear the profile cache (useful for testing)."""
+    _profile_cache.clear()
+
+
 @dataclass
 class FallbackResult:
-    """降级策略执行结果"""
+    """Fallback strategy execution result"""
     success: bool
     data: dict[str, Any] | None
     strategy_used: str
@@ -20,116 +136,116 @@ class FallbackResult:
 
 class ChainOfThoughtPrompts:
     """
-    Chain-of-Thought 提示模板库
+    Chain-of-Thought prompt template library
 
-    为小模型提供 Few-shot examples 以提高输出质量。
+    Provides Few-shot examples to improve output quality for small models.
     """
 
-    # 任务分解的 Few-shot 示例
+    # Task decomposition Few-shot examples
     TASK_DECOMPOSITION_EXAMPLES = """
-## Few-shot 示例
+## Few-shot Examples
 
-示例 1: 简单任务
-输入: "运行测试"
-输出:
+Example 1: Simple Task
+Input: "Run tests"
+Output:
 {
-  "analysis": "这是一个简单的单步任务",
+  "analysis": "Simple single-step task",
   "subtasks": [
-    {"id": "task_1", "description": "运行 pytest 测试", "dependencies": []}
+    {"id": "task_1", "description": "Run pytest tests", "dependencies": []}
   ]
 }
 
-示例 2: 复杂任务
-输入: "创建一个用户认证系统"
-输出:
+Example 2: Complex Task
+Input: "Create a user authentication system"
+Output:
 {
-  "analysis": "需要创建前后端的完整认证系统",
+  "analysis": "Need to create a full auth system with frontend and backend",
   "subtasks": [
-    {"id": "task_1", "description": "设计数据库模型（用户表）", "dependencies": []},
-    {"id": "task_2", "description": "创建后端认证 API", "dependencies": ["task_1"]},
-    {"id": "task_3", "description": "创建前端登录页面", "dependencies": []},
-    {"id": "task_4", "description": "集成测试", "dependencies": ["task_2", "task_3"]}
+    {"id": "task_1", "description": "Design database models (user table)", "dependencies": []},
+    {"id": "task_2", "description": "Create backend auth API", "dependencies": ["task_1"]},
+    {"id": "task_3", "description": "Create frontend login page", "dependencies": []},
+    {"id": "task_4", "description": "Integration tests", "dependencies": ["task_2", "task_3"]}
   ]
 }
 
-示例 3: 有依赖的任务
-输入: "重构项目并添加新功能"
-输出:
+Example 3: Task with Dependencies
+Input: "Refactor project and add new features"
+Output:
 {
-  "analysis": "需要先重构代码，然后添加功能",
+  "analysis": "Need to refactor first, then add features",
   "subtasks": [
-    {"id": "task_1", "description": "了解当前代码结构", "dependencies": []},
-    {"id": "task_2", "description": "重构代码结构", "dependencies": ["task_1"]},
-    {"id": "task_3", "description": "添加新功能", "dependencies": ["task_2"]},
-    {"id": "task_4", "description": "验证新功能", "dependencies": ["task_3"]}
+    {"id": "task_1", "description": "Understand current code structure", "dependencies": []},
+    {"id": "task_2", "description": "Refactor code structure", "dependencies": ["task_1"]},
+    {"id": "task_3", "description": "Add new features", "dependencies": ["task_2"]},
+    {"id": "task_4", "description": "Verify new features", "dependencies": ["task_3"]}
   ]
 }
 """
 
-    # 工具选择的 Few-shot 示例
+    # Tool selection Few-shot examples
     TOOL_SELECTION_EXAMPLES = """
-## 工具选择指南
+## Tool Selection Guide
 
-### 创建新文件
-- 使用: write 命令
-- 示例: {"command": "write", "path": "hello.py", "content": "print('hello')"}
+### Create New File
+- Use: write command
+- Example: {"command": "write", "path": "hello.py", "content": "print('hello')"}
 
-### 修改现有文件
-- 使用: edit 命令
-- 示例: {"command": "edit", "path": "main.py", "old_text": "old code", "content": "new code"}
+### Modify Existing File
+- Use: edit command
+- Example: {"command": "edit", "path": "main.py", "old_text": "old code", "content": "new code"}
 
-### 读取文件
-- 使用: read 命令
-- 示例: {"command": "read", "path": "config.py"}
+### Read File
+- Use: read command
+- Example: {"command": "read", "path": "config.py"}
 
-### 执行脚本
-- 使用: execute 命令
-- 示例: {"command": "execute", "script": "python test.py"}
+### Execute Script
+- Use: execute command
+- Example: {"command": "execute", "script": "python test.py"}
 
-### 搜索代码
-- 使用: search 命令
-- 示例: {"command": "search", "query": "TODO"}
+### Search Code
+- Use: search command
+- Example: {"command": "search", "query": "TODO"}
 
-### 列出目录
-- 使用: list_dir 命令
-- 示例: {"command": "list_dir", "path": "."}
+### List Directory
+- Use: list_dir command
+- Example: {"command": "list_dir", "path": "."}
 
-### 创建目录
-- 使用: mkdir 命令
-- 示例: {"command": "mkdir", "path": "src/utils"}
+### Create Directory
+- Use: mkdir command
+- Example: {"command": "mkdir", "path": "src/utils"}
 """
 
-    # 错误恢复的 Few-shot 示例
+    # Error recovery Few-shot examples
     ERROR_RECOVERY_EXAMPLES = """
-## 错误恢复策略
+## Error Recovery Strategies
 
-### 语法错误
-问题: "SyntaxError" 或 "IndentationError"
-策略: 检查缩进，修复后重试
+### Syntax Error
+Problem: "SyntaxError" or "IndentationError"
+Strategy: Check indentation, fix and retry
 
-### 导入错误
-问题: "ModuleNotFoundError"
-策略: 先安装依赖: {"command": "pip_install", "packages": ["package_name"]}
+### Import Error
+Problem: "ModuleNotFoundError"
+Strategy: Install dependencies first: {"command": "pip_install", "packages": ["package_name"]}
 
-### 文件不存在
-问题: "File not found"
-策略: 检查路径，可能需要创建目录
+### File Not Found
+Problem: "File not found"
+Strategy: Check path, may need to create directory
 
-### 权限错误
-问题: "Permission denied"
-策略: 使用其他路径或命令
+### Permission Error
+Problem: "Permission denied"
+Strategy: Use alternative path or command
 
-### JSON 解析失败
-问题: 模型输出不是有效 JSON
-策略: 简化提示，只要求输出 JSON
+### JSON Parse Failure
+Problem: Model output is not valid JSON
+Strategy: Simplify prompt, request JSON only
 """
 
 
 class OutputValidator:
     """
-    输出验证器
+    Output Validator
 
-    验证 LLM 输出是否为有效的 JSON。
+    Validates LLM output is valid JSON.
     """
 
     def __init__(self):
@@ -137,12 +253,12 @@ class OutputValidator:
 
     def validate_json(self, output: str) -> tuple[bool, dict[str, Any] | None, str | None]:
         """
-        验证 JSON 输出。
+        Validate JSON output.
 
         Returns:
             (is_valid, parsed_data, error_message)
         """
-        # 尝试直接解析
+        # Try direct parse first
         try:
             data = json.loads(output)
             self.validation_history.append({"strategy": "direct", "success": True})
@@ -150,7 +266,7 @@ class OutputValidator:
         except json.JSONDecodeError:
             pass
 
-        # 尝试提取 JSON 块
+        # Try extracting JSON block
         extracted = self._extract_json_block(output)
         if extracted:
             try:
@@ -164,24 +280,24 @@ class OutputValidator:
         return False, None, "Failed to parse JSON"
 
     def _extract_json_block(self, text: str) -> str | None:
-        """从文本中提取 JSON 代码块。"""
-        # 尝试 ```json ... ```
+        """Extract JSON code block from text."""
+        # Try ```json ... ```
         match = re.search(r"```json\s*([\s\S]*?)\s*```", text)
         if match:
             return match.group(1).strip()
 
-        # 尝试 ``` ... ```
+        # Try ``` ... ```
         match = re.search(r"```\s*([\s\S]*?)\s*```", text)
         if match:
             content = match.group(1).strip()
             if content.startswith("{") or content.startswith("["):
                 return content
 
-        # 尝试从 { 或 [ 开始到最后一个 } 或 ]
+        # Try finding from { or [ to last } or ]
         for start_char, end_char in [("{", "}"), ("[", "]")]:
             if start_char in text:
                 start_idx = text.index(start_char)
-                # 找到最后一个匹配
+                # Find last match
                 last_end = text.rfind(end_char)
                 if last_end > start_idx:
                     candidate = text[start_idx:last_end + 1]
@@ -196,15 +312,15 @@ class OutputValidator:
 
 class FallbackStrategy:
     """
-    降级策略
+    Fallback strategy
 
-    当主要策略失败时的备选方案。
+    Backup approach when the primary strategy fails.
     """
 
     def __init__(self, llm_call: Callable[[str], str]):
         """
         Args:
-            llm_call: LLM 调用函数
+            llm_call: LLM call function
         """
         self.llm_call = llm_call
         self.strategy_history: list[str] = []
@@ -216,57 +332,58 @@ class FallbackStrategy:
         max_retries: int = 3,
     ) -> FallbackResult:
         """
-        执行带降级的 LLM 调用。
+        Execute LLM call with fallback strategies.
 
-        策略链:
-        1. 直接调用 (带 JSON 格式要求)
-        2. 简化提示 (只要求 JSON)
-        3. 使用正则提取关键字段
-        4. 安全默认值
+        Optimized strategy chain (reduces LLM calls):
+        1. Direct call (with JSON format) -> return if success
+        2. Regex extract from same response -> return if success (no extra LLM call)
+        3. Simplified prompt retry -> return if success
+        4. Safe default value
 
         Args:
-            prompt: 原始提示
-            schema: 期望的 JSON schema
-            max_retries: 最大重试次数
+            prompt: Original prompt
+            schema: Expected JSON schema
+            max_retries: Maximum retry count
 
         Returns:
             FallbackResult
         """
-        # 策略 1: 直接调用
+        # Strategy 1: Direct call
         self.strategy_history.append("direct")
         result = self._try_direct_call(prompt, schema)
         if result.success:
             return result
 
-        # 策略 2: 简化提示
+        # Strategy 2: Regex extract from same response (no extra LLM call)
+        self.strategy_history.append("regex")
+        raw_response = result.error or ""
+        regex_result = self._try_regex_from_response(raw_response, schema)
+        if regex_result.success:
+            return regex_result
+
+        # Strategy 3: Simplified prompt retry
         self.strategy_history.append("simplified")
         result = self._try_simplified_prompt(prompt, schema)
         if result.success:
             return result
 
-        # 策略 3: 正则提取
-        self.strategy_history.append("regex")
-        result = self._try_regex_extraction(prompt, schema)
-        if result.success:
-            return result
-
-        # 策略 4: 安全默认值
+        # Strategy 4: Safe default value
         self.strategy_history.append("safe_default")
         return self._get_safe_default(schema)
 
     def _try_direct_call(
         self, prompt: str, schema: dict[str, Any] | None
     ) -> FallbackResult:
-        """策略 1: 直接调用。"""
+        """Strategy 1: Direct call."""
         try:
-            # 简化 schema 为字符串描述
+            # Simplify schema to string description
             schema_hint = ""
             if schema:
-                schema_hint = f"\n\n期望的 JSON 结构: {json.dumps(schema, ensure_ascii=False)}"
+                schema_hint = f"\n\nExpected JSON structure: {json.dumps(schema, ensure_ascii=False)}"
 
             enhanced_prompt = f"""{prompt}{schema_hint}
 
-重要: 你必须只返回有效的 JSON，不要任何其他文字。"""
+Important: You must return valid JSON only, no other text."""
 
             response = self.llm_call(enhanced_prompt)
 
@@ -279,11 +396,12 @@ class FallbackStrategy:
                     data=data,
                     strategy_used="direct"
                 )
+            # Store raw response in error field for regex fallback reuse
             return FallbackResult(
                 success=False,
                 data=None,
                 strategy_used="direct",
-                error=error or "Invalid JSON"
+                error=response,  # raw response for _try_regex_from_response
             )
         except Exception as e:
             return FallbackResult(
@@ -296,20 +414,20 @@ class FallbackStrategy:
     def _try_simplified_prompt(
         self, prompt: str, schema: dict[str, Any] | None
     ) -> FallbackResult:
-        """策略 2: 简化提示，只要求 JSON。"""
+        """Strategy 2: Simplified prompt, request JSON only."""
         try:
-            # 构建最简单的 JSON 格式要求
+            # Build simplest JSON format requirement
             required_fields = []
             if schema and "properties" in schema:
                 required_fields = list(schema["properties"].keys())
 
             fields_hint = ""
             if required_fields:
-                fields_hint = f"\n\n必须包含的字段: {', '.join(required_fields)}"
+                fields_hint = f"\n\nRequired fields: {', '.join(required_fields)}"
 
             simplified_prompt = f"""{prompt}{fields_hint}
 
-只返回 JSON，不要任何解释。用这个格式:
+Return JSON only, no explanation. Use this format:
 {{"field1": "value1", "field2": "value2"}}
 """
 
@@ -338,44 +456,50 @@ class FallbackStrategy:
                 error=str(e)
             )
 
+    def _try_regex_from_response(
+        self, raw_response: str, schema: dict[str, Any] | None
+    ) -> FallbackResult:
+        """Strategy 2: Extract JSON from existing response (no extra LLM call)."""
+        if not raw_response:
+            return FallbackResult(
+                success=False, data=None, strategy_used="regex",
+                error="No response to extract from"
+            )
+
+        validator = OutputValidator()
+        is_valid, data, _ = validator.validate_json(raw_response)
+        if is_valid and data:
+            return FallbackResult(success=True, data=data, strategy_used="regex")
+
+        # Try regex field extraction
+        extracted: dict[str, Any] = {}
+        patterns = {
+            "analysis": r"(?:分析|analysis)[:：]?\s*(.+?)(?:\n|$)",
+            "description": r"(?:描述|description)[:：]?\s*(.+?)(?:\n|$)",
+            "suggestion": r"(?:建议|suggestion)[:：]?\s*(.+?)(?:\n|$)",
+            "id": r"(?:id|ID)[:：]?\s*([a-zA-Z0-9_]+)",
+            "status": r"(?:status|状态)[:：]?\s*([a-zA-Z_]+)",
+        }
+        for key, pattern in patterns.items():
+            match = re.search(pattern, raw_response, re.IGNORECASE)
+            if match:
+                extracted[key] = match.group(1).strip()
+
+        if extracted:
+            return FallbackResult(success=True, data=extracted, strategy_used="regex")
+
+        return FallbackResult(
+            success=False, data=None, strategy_used="regex",
+            error="No fields extracted"
+        )
+
     def _try_regex_extraction(
         self, prompt: str, schema: dict[str, Any] | None
     ) -> FallbackResult:
-        """策略 3: 使用正则提取关键字段。"""
+        """Strategy 3: Re-call LLM and regex extract (only when first two steps fail)."""
         try:
-            # 重新调用获取原始响应
-            response = self.llm_call(prompt + "\n\n请简洁回答。")
-
-            extracted: dict[str, Any] = {}
-
-            # 尝试提取常见字段
-            patterns = {
-                "analysis": r"(?:分析|analysis)[:：]?\s*(.+?)(?:\n|$)",
-                "description": r"(?:描述|description)[:：]?\s*(.+?)(?:\n|$)",
-                "suggestion": r"(?:建议|suggestion)[:：]?\s*(.+?)(?:\n|$)",
-                "id": r"(?:id|ID)[:：]?\s*([a-zA-Z0-9_]+)",
-                "status": r"(?:status|状态)[:：]?\s*([a-zA-Z_]+)",
-            }
-
-            for key, pattern in patterns.items():
-                match = re.search(pattern, response, re.IGNORECASE)
-                if match:
-                    extracted[key] = match.group(1).strip()
-
-            # 如果提取到任何内容，认为成功
-            if extracted:
-                return FallbackResult(
-                    success=True,
-                    data=extracted,
-                    strategy_used="regex"
-                )
-
-            return FallbackResult(
-                success=False,
-                data=None,
-                strategy_used="regex",
-                error="No fields extracted"
-            )
+            response = self.llm_call(prompt + "\n\nBe concise.")
+            return self._try_regex_from_response(response, schema)
         except Exception as e:
             return FallbackResult(
                 success=False,
@@ -387,7 +511,7 @@ class FallbackStrategy:
     def _get_safe_default(
         self, schema: dict[str, Any] | None
     ) -> FallbackResult:
-        """策略 4: 返回安全默认值。"""
+        """Strategy 4: Return safe default value."""
         default_data: dict[str, Any] = {}
 
         if schema and "properties" in schema:
@@ -414,9 +538,9 @@ class FallbackStrategy:
 
 class SmallModelOptimizer:
     """
-    小模型优化器
+    Small Model Optimizer
 
-    整合所有小模型适配策略。
+    Integrates all small model adaptation strategies.
     """
 
     def __init__(self, llm_call: Callable[[str], str]):
@@ -428,28 +552,28 @@ class SmallModelOptimizer:
         self, task: str, context: str = ""
     ) -> dict[str, Any]:
         """
-        创建任务计划（带 CoT 优化）。
+        Create task plan (with CoT optimization).
 
         Args:
-            task: 任务描述
-            context: 项目上下文
+            task: Task description
+            context: Project context
 
         Returns:
-            解析后的计划数据
+            Parsed plan data
         """
         prompt = f"""{self.cot.TASK_DECOMPOSITION_EXAMPLES}
 
-## 任务
+## Task
 {task}
 
 {self.cot.TOOL_SELECTION_EXAMPLES}
 
 {self.cot.ERROR_RECOVERY_EXAMPLES}
 
-现在分析任务并输出 JSON："""
+Now analyze the task and output JSON:"""
 
         if context:
-            prompt += f"\n\n## 当前项目状态\n{context}"
+            prompt += f"\n\n## Current Project State\n{context}"
 
         result = self.fallback.execute_with_fallback(
             prompt,
@@ -475,9 +599,9 @@ class SmallModelOptimizer:
         if result.success and result.data:
             return result.data
 
-        # 返回默认计划
+        # Return default plan
         return {
-            "analysis": "使用默认计划",
+            "analysis": "Using default plan",
             "subtasks": [
                 {"id": "task_1", "description": task, "dependencies": []}
             ]
@@ -489,31 +613,31 @@ class SmallModelOptimizer:
         execution_summary: str = ""
     ) -> dict[str, Any]:
         """
-        生成操作指令（带 CoT 优化）。
+        Generate action command (with CoT optimization).
 
         Args:
-            task_description: 任务描述
-            execution_summary: 已完成的执行历史
+            task_description: Task description
+            execution_summary: Completed execution history
 
         Returns:
-            操作参数字典
+            Action parameter dictionary
         """
-        prompt = f"""你是一个编程助手。
+        prompt = f"""You are a programming assistant.
 
-## 当前任务
+## Current Task
 {task_description}
 
-## 已完成的任务
-{execution_summary or "无"}
+## Completed Tasks
+{execution_summary or "None"}
 
-## 规则
-1. 必须使用 write 或 edit 命令
-2. 禁止使用 finish 或 debug 命令
-3. 必须包含具体的文件内容
+## Rules
+1. Must use write or edit commands
+2. Do NOT use finish or debug commands
+3. Must include concrete file content
 
-## 输出格式
-返回 JSON:
-{{"command": "write", "path": "文件名.py", "content": "文件内容"}}
+## Output Format
+Return JSON:
+{{"command": "write", "path": "filename.py", "content": "file content"}}
 """
 
         result = self.fallback.execute_with_fallback(
@@ -531,22 +655,22 @@ class SmallModelOptimizer:
         if result.success and result.data:
             return result.data
 
-        # 返回默认操作
-        return {"command": "debug", "content": "无法生成有效操作"}
+        # Return default action
+        return {"command": "debug", "content": "Unable to generate valid action"}
 
     def get_strategy_report(self) -> str:
-        """获取策略使用报告。"""
-        lines = ["## 降级策略使用报告\n"]
+        """Get strategy usage report."""
+        lines = ["## Fallback Strategy Report\n"]
 
         strategies = self.fallback.strategy_history
         if not strategies:
-            return "暂无策略使用记录"
+            return "No strategy usage recorded"
 
         from collections import Counter
         counter = Counter(strategies)
 
-        lines.append(f"总调用次数: {len(strategies)}\n")
-        lines.append("策略使用统计:")
+        lines.append(f"Total calls: {len(strategies)}\n")
+        lines.append("Strategy usage statistics:")
         for strategy, count in counter.most_common():
             lines.append(f"  - {strategy}: {count} ({count/len(strategies)*100:.1f}%)")
 

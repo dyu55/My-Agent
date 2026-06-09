@@ -1,0 +1,237 @@
+太棒了！既然你完全没有编程经验，我们从最基础、最规范的“三剑客”结构（HTML + CSS + JavaScript）开始。这种结构是所有专业网页开发的基础，能让你以后修改起来非常方便。
+
+为了能让你直接看到效果，请按照以下步骤操作：
+
+### 第一步：准备工作
+
+1.  在电脑桌面上新建一个文件夹，名字叫 `family-account`（全家记账）。
+2.  打开一个简单的文本编辑器（比如 Windows 自带的“记事本”，或者更好的“Notepad++”；如果你想以后认真学，建议下载 **VS Code**）。
+3.  我们要在这个文件夹里创建 **3个文件**。
+
+---
+
+### 第二步：编写代码
+
+请分别创建以下三个文件，并将代码复制进去。**注意：保存时文件名一定要完全一致。**
+
+#### 1. 页面结构文件：`index.html`
+这个文件相当于人的“骨架”，决定了页面上有哪些文字、按钮和输入框。
+
+```html
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我们家的记账本</title>
+    <!-- 这里是引入样式文件，告诉网页去哪里找衣服穿 -->
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <h1>💰 我们家的记账本</h1>
+            <p>记录生活中的每一分钱</p>
+        </header>
+
+        <!-- 汇总区域：显示总额 -->
+        <section class="summary">
+            <div class="card">
+                <h3>总支出</h3>
+                <p id="total-expense">￥0.00</p>
+            </div>
+            <div class="card">
+                <h3>本月剩余</h3>
+                <p id="total-balance">￥0.00</p>
+            </div>
+        </section>
+
+        <!-- 输入区域：用来填数据 -->
+        <section class="input-section">
+            <div class="input-group">
+                <input type="text" id="item-name" placeholder="买了什么？（例：买菜）">
+                <input type="number" id="item-amount" placeholder="金额（例：50）">
+                <select id="item-category">
+                    <option value="饮食">🍴 饮食</option>
+                    <option value="购物">🛍️ 购物</option>
+                    <option value="交通">🚗 交通</option>
+                    <option value="娱乐">🎮 娱乐</option>
+                    <option value="其他">❓ 其他</option>
+                </select>
+                <button id="add-btn">添加记录</button>
+            </div>
+        </section>
+
+        <!-- 列表区域：显示历史记录 -->
+        <section class="history-section">
+            <h2>最近记录</h2>
+            <ul id="record-list">
+                <!-- 这里以后会通过逻辑自动生成内容 -->
+                <li class="empty-msg">暂无记录，快去记一笔吧！</li>
+            </ul>
+        </section>
+    </div>
+
+    <!-- 这里是引入逻辑文件，告诉网页点击按钮后该干什么 -->
+    <script src="script.js"></script>
+</body>
+</html>
+```
+
+#### 2. 样式文件：`style.css`
+这个文件相当于人的“衣服和妆容”，决定了颜色、间距、字体和布局是否好看。
+
+```css
+/* 基础设置 */
+body {
+    font-family: 'Microsoft YaHei', sans-serif;
+    background-color: #f4f7f6;
+    margin: 0;
+    display: flex;
+    justify-content: center;
+    color: #333;
+}
+
+.container {
+    width: 100%;
+    max-width: 500px; /* 限制最大宽度，让它在电脑上看也不至于太宽 */
+    padding: 20px;
+}
+
+header {
+    text-align: center;
+    margin-bottom: 30px;
+}
+
+h1 { color: #2c3e50; margin-bottom: 5px; }
+header p { color: #7f8c8d; font-size: 14px; }
+
+/* 汇总卡片样式 */
+.summary {
+    display: flex;
+    gap: 15px;
+    margin-bottom: 25px;
+}
+
+.card {
+    flex: 1;
+    background: white;
+    padding: 15px;
+    border-radius: 12px;
+    text-align: center;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+.card h3 { margin: 0; font-size: 14px; color: #7f8c8d; }
+.card p { margin: 10px 0 0; font-size: 20px; font-weight: bold; color: #e74c3c; }
+
+/* 输入框区域样式 */
+.input-section {
+    background: white;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    margin-bottom: 25px;
+}
+
+.input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+input, select, button {
+    padding: 12px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 16px;
+}
+
+button {
+    background-color: #27ae60;
+    color: white;
+    border: none;
+    cursor: pointer;
+    font-weight: bold;
+    transition: background 0.3s;
+}
+
+button:hover {
+    background-color: #219150;
+}
+
+/* 列表样式 */
+.history-section {
+    background: white;
+    padding: 20px;
+    border-radius: 12px;
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+}
+
+ul { list-style: none; padding: 0; }
+
+li {
+    display: flex;
+    justify-content: space-between;
+    padding: 12px 0;
+    border-bottom: 1px solid #eee;
+}
+
+.empty-msg {
+    color: #bdc3c7;
+    text-align: center;
+    padding: 20px 0;
+}
+```
+
+#### 3. 逻辑文件：`script.js`
+这个文件相当于人的“大脑”，决定了点击按钮后数据怎么变。**目前我们先写一个“测试逻辑”，证明它已经成功连接了。**
+
+```javascript
+// 当页面加载完成后，执行里面的代码
+document.addEventListener('DOMContentLoaded', () => {
+    console.log("记账本逻辑已加载！");
+
+    // 获取按钮元素
+    const addBtn = document.getElementById('add-btn');
+
+    // 给按钮添加一个“点击事件”
+    addBtn.addEventListener('click', () => {
+        // 获取输入框的值
+        const name = document.getElementById('item-name').value;
+        const amount = document.getElementById('item-amount').value;
+
+        // 简单的逻辑判断：如果用户没填内容，就弹个窗提醒
+        if (name === "" || amount === "") {
+            alert("请记得填写买了什么和多少钱哦！");
+        } else {
+            alert("太棒了！你刚刚输入了：" + name + "，金额：" + amount + "元。接下来我们要实现真正的存储功能了！");
+            
+            // 清空输入框，方便下次输入
+            document.getElementById('item-name').value = "";
+            document.getElementById('item-amount').value = "";
+        }
+    });
+});
+```
+
+---
+
+### 第三步：如何查看效果？
+
+1.  确保你的文件夹里现在有这三个文件：
+    *   `index.html`
+    *   `style.css`
+    *   `script.js`
+2.  **双击 `index.html`**，它会自动用你的默认浏览器（Chrome, Edge 等）打开。
+3.  你应该能看到一个漂亮的、带有卡片和输入框的界面。
+4.  尝试在输入框填入内容，然后点击“添加记录”按钮。如果弹出了一个对话框，恭喜你！**你的第一个网页框架搭建成功了！**
+
+### 总结一下你学到的概念：
+
+*   **HTML (`index.html`)**: 就像房子的**框架**（墙壁、门、窗户）。
+*   **CSS (`style.css`)**: 就像房子的**装修**（刷什么颜色的漆、家具摆在哪里）。
+*   **JavaScript (`script.js`)**: 就像房子的**智能系统**（按一下开关，灯会亮）。
+
+**下一步你想做什么？** 是想让我教你如何把输入的数据真正显示在下方的列表里，还是想学如何让它能保存数据（刷新页面后不消失）？

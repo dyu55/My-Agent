@@ -24,14 +24,14 @@ MODELS = {
     "deepseek-v4-pro": {
         "client": None,  # lazy init
         "base_url": "https://api.deepseek.com",
-        "api_key": "sk-6837b4fcad1f4b5d90c5910bcd3481f0",
+        "api_key": os.getenv("BENCHMARK_DEEPSEEK_API_KEY", ""),
         "model": "deepseek-v4-pro",
         "label": "DeepSeek V4 Pro",
     },
     "mimo-v2.5-pro": {
         "client": None,
         "base_url": "https://token-plan-sgp.xiaomimimo.com/v1",
-        "api_key": "tp-sba9vhdblxaj6lhst12lpivbg598s6n0tpk7ytlbh8wmm299",
+        "api_key": os.getenv("BENCHMARK_MIMO_API_KEY", ""),
         "model": "mimo-v2.5-pro",
         "label": "MiMo V2.5 Pro",
     },
@@ -198,24 +198,24 @@ SCRAPING_TESTS = [
         "prompt": """Extract product information from this HTML product card into a structured JSON object. Include: name, price (numeric, use current/discounted price), currency, in_stock (boolean), rating (numeric 0-5), review_count (numeric), and features (list of strings).
 
 ```html
-<div class="product-card" data-id="SKU-88291">
-  <h1 class="product-title">Pro Wireless Headphones ANC 2.0</h1>
+<div class="product-card">
+  <h1 class="product-title">Wireless Noise-Cancelling Headphones Pro X</h1>
   <div class="pricing">
     <span class="original-price">$299.99</span>
     <span class="current-price">$199.99</span>
+    <span class="discount-badge">-33%</span>
   </div>
-  <div class="availability in-stock">In Stock (47 units)</div>
+  <div class="availability in-stock">In Stock</div>
   <div class="rating">
-    <span class="stars">★★★★☆</span>
-    <span class="rating-value">4.2</span>
-    <span class="review-count">(1,234 reviews)</span>
+    <span class="stars" data-rating="4.5">★★★★½</span>
+    <span class="review-count">2,847 reviews</span>
   </div>
   <ul class="features">
-    <li>Active Noise Cancellation 2.0</li>
+    <li>Active Noise Cancellation (ANC)</li>
     <li>40-hour battery life</li>
-    <li>Bluetooth 5.3</li>
-    <li>Multipoint connection</li>
+    <li>Bluetooth 5.3 with multipoint</li>
     <li>USB-C fast charging</li>
+    <li>Foldable design with carrying case</li>
   </ul>
 </div>
 ```""",
@@ -224,63 +224,72 @@ SCRAPING_TESTS = [
 
 EXTRACTION_TESTS = [
     {
-        "id": "extract-summarize",
+        "id": "extract-summary",
         "category": "Info Extraction",
-        "name": "长文摘要 + 关键信息提取",
-        "prompt": """Summarize this research abstract into exactly 3 bullet points, each ≤30 words. Then extract these fields as key-value pairs: main_finding, methodology, sample_size, speedup_achieved, limitations.
+        "name": "论文摘要提取",
+        "prompt": """Read this paper abstract and extract: title, authors, main_finding (one sentence), methodology (one sentence), and limitations (if any). Return as JSON.
 
----TEXT---
-Recent advances in large language models (LLMs) have demonstrated remarkable capabilities across a wide range of natural language processing tasks. However, the deployment of these models in production environments presents significant challenges related to inference latency, memory consumption, and computational cost. In this paper, we propose SparseAttention-XL, a novel attention mechanism that reduces the quadratic complexity of standard self-attention to O(n log n) while maintaining 97.8% of the original model quality as measured by perplexity and downstream task performance. Our approach introduces a learned sparsity pattern that adapts dynamically to input sequences, allowing the model to focus computational resources on semantically important token interactions while pruning irrelevant connections. We evaluated SparseAttention-XL on a suite of 1,200 benchmark tasks across 8 domains, including question answering, summarization, code generation, and mathematical reasoning. Results show an average 3.2x speedup in inference latency and a 68% reduction in peak memory usage compared to dense attention baselines, with only a 0.3 point increase in perplexity. The method is architecture-agnostic and can be applied to both encoder-decoder and decoder-only models. Limitations include reduced effectiveness on very short sequences (< 64 tokens) and additional training overhead of approximately 15% during the fine-tuning phase.""",
+```
+SparseAttention-XL: Scaling Transformers to Million-Token Contexts
+
+John Smith, Alice Chen, Bob Williams
+MIT CSAIL, 2026
+
+We introduce SparseAttention-XL, a novel attention mechanism that reduces the quadratic complexity of self-attention to O(n log n) while retaining 97.8% of the original model quality. Our approach uses learned dynamic sparsity patterns that adapt to input content, combined with a streaming memory mechanism for long-range dependencies. On a suite of 1,200 tasks across 8 domains, SparseAttention-XL achieves 3.2x faster inference and 68% lower peak memory compared to dense attention, with only a 0.3 perplexity increase. The method is particularly effective for sequences beyond 10k tokens, though it shows diminishing returns for sequences under 64 tokens. Training overhead is approximately 15% compared to standard transformers.
+```""",
     },
     {
         "id": "extract-structured",
         "category": "Info Extraction",
-        "name": "会议记录 → 结构化JSON",
-        "prompt": """Extract the following from this meeting transcript as JSON: date, attendees (list of names), key_decisions (list of {decision, made_by}), action_items (list of {task, owner, deadline}), and next_meeting. If a field is not mentioned, set it to null.
+        "name": "会议纪要结构化提取",
+        "prompt": """Extract structured information from this meeting transcript into JSON. Output fields: date, attendees (list), key_decisions (list of {decision, made_by}), action_items (list of {task, assignee, deadline}). If a field is missing, set it to null.
 
----MEETING TRANSCRIPT---
-Alice: Alright, let's start the sprint planning for May 28th. Bob, can you take notes?
-Bob: Sure. So our top priority is the payment gateway integration. Charlie, you mentioned you'd handle that?
-Charlie: Yes, I've already started the Stripe integration. I expect to have a PR ready by Friday, June 2nd.
-Alice: Good. Diana, what about the email notification system?
-Diana: I did a spike on it. I think we should go with SendGrid. Much simpler API than SES. I'll have a design doc by EOD Thursday.
-Bob: And the database migration from MySQL to PostgreSQL?
-Alice: That's on hold until Q3. The cost analysis didn't justify the switch right now. Let's table it.
-Charlie: What about the security audit findings?
-Alice: Right. Decision: we need to fix the XSS vulnerabilities in the dashboard before the next release. Diana, can you own that?
-Diana: Yes, I'll prioritize it after the email design doc.
-Bob: Action items summary: Charlie - Stripe PR by June 2. Diana - SendGrid design doc by Thursday, XSS fixes after. Alice - anything for you?
-Alice: I'll update the roadmap and schedule the Q3 planning session. Let's meet again next Wednesday, June 4th, same time.
-Bob: Got it. Meeting adjourned!""",
+```
+Team Sync - May 28, 2023
+
+Attendees: Alice, Bob, Charlie, Diana
+
+Alice: Okay, let's start. First item — the dashboard XSS vulnerability. We need to fix that before the next release.
+Bob: Agreed. I'll take that. Can have a patch by Friday.
+Alice: Great, deadline Friday June 2nd for the XSS fix.
+
+Charlie: On the database migration — I've been looking at the PostgreSQL migration plan. It's more complex than we thought.
+Diana: Should we postpone?
+Charlie: I think we should put it on hold until Q3. We don't have the bandwidth right now.
+Alice: Makes sense. Database migration on hold until Q3.
+
+Diana: For the email notification system, I researched a few providers. I recommend we go with SendGrid. Good API, reasonable pricing.
+Alice: Any objections? None? Okay, SendGrid it is. Diana, can you set up the integration?
+Diana: Yes, I'll have a prototype by next Wednesday, June 7th.
+
+Bob: One more thing — the mobile app login flow needs UX review. The current flow has a 23% drop-off rate.
+Alice: Good catch. Let's schedule a UX review session. I'll coordinate with the design team.
+```""",
     },
 ]
 
-LONG_TASK_TESTS = [
+LONG_TESTS = [
     {
         "id": "long-calculator",
         "category": "Long Task",
-        "name": "多步骤构建: Calculator 类",
-        "prompt": """Build a Python Calculator class step by step. Complete ALL 6 steps in ONE response. Include only the final complete code.
+        "name": "多步骤计算器构建",
+        "prompt": """Build a complete calculator class in Python step by step. Follow these instructions in order:
 
-Step 1: Create a `Calculator` class with `__init__` that initializes an empty history list and a `_value` state variable starting at 0.
+1. Create a `Calculator` class with an `__init__` method that initializes `history` (empty list) and `_value` (0).
 
-Step 2: Add methods: `add(a, b)`, `subtract(a, b)`, `multiply(a, b)`, `divide(a, b)`. Each stores the operation in history as a dict: {operation, operands, result, timestamp}. Each updates `_value` to the latest result.
+2. Add methods `add(n)`, `subtract(n)`, `multiply(n)`, `divide(n)` that modify `_value` and log each operation to `history` with timestamp. Division by zero should raise ValueError.
 
-Step 3: Add `get_history(n=5)` that returns the last n operations.
+3. Add a `history` property that returns a copy of the operation history list. Each entry should be a dict: {operation, operand, result, timestamp}.
 
-Step 4: Add `undo()` that reverts the last operation and restores previous `_value`. Requires tracking previous state before each operation.
+4. Add an `undo()` method that reverts the last operation by replaying history from scratch (excluding the last entry).
 
-Step 5: Add error handling: division by zero raises ValueError, type checking on numeric inputs, and a `__str__` method showing current value and operation count.
+5. Add input validation: all numeric operands must be int or float. Raise TypeError otherwise.
 
-Step 6: Write a `if __name__ == '__main__':` demo block that:
-- Creates a Calculator
-- Performs 3-4 operations
-- Prints history
-- Undoes one operation
-- Shows the calculator state after undo
-- Demonstrates error handling
+6. Add a `__str__` method that shows the current value and number of operations.
 
-Return the complete, runnable Python file.""",
+7. Write a demo section at the bottom that creates a Calculator, performs several operations, shows history, undoes one, and prints state. Use `if __name__ == '__main__'` guard.
+
+Return the complete code.""",
     },
 ]
 
@@ -289,470 +298,402 @@ TIMING_TESTS = [
         "id": "timing-simple",
         "category": "Timing",
         "name": "简单计算 (5次)",
-        "prompt": "Calculate 12345 * 67890 and return ONLY the integer result. No other text.",
+        "prompt": "What is 123 * 456 + 789? Answer with just the number.",
         "runs": 5,
     },
     {
         "id": "timing-json",
         "category": "Timing",
         "name": "JSON生成 (3次)",
-        "prompt": "Generate a JSON array of exactly 20 objects with fields: id (1-20), name (common English first name), age (integer 18-65). Return ONLY valid JSON, no explanation or markdown.",
+        "prompt": """Generate a valid JSON object with these fields:
+- name: "benchmark-test"
+- version: "1.0"
+- scores: [95, 87, 92, 78, 88]
+- metadata: {author: "AI", date: "2026-05-26", tags: ["test", "benchmark"]}
+Return ONLY the JSON object, no explanation.""",
         "runs": 3,
     },
 ]
 
-ALL_TEST_GROUPS = [
-    ("Coding", CODING_TESTS),
-    ("Planning", PLANNING_TESTS),
-    ("Web Scraping", SCRAPING_TESTS),
-    ("Info Extraction", EXTRACTION_TESTS),
-    ("Long Task", LONG_TASK_TESTS),
-    ("Timing", TIMING_TESTS),
-]
+ALL_TESTS = CODING_TESTS + PLANNING_TESTS + SCRAPING_TESTS + EXTRACTION_TESTS + LONG_TESTS
+TIMING_MAP = {t["id"]: t for t in TIMING_TESTS}
+
+
+# ============================================================
+# Scoring
+# ============================================================
+
+def score_coding(result):
+    """Score coding tests: has_code, imports, docstring, type_hints, error_handling, etc."""
+    reasons = []
+    content = result.get("content", "")
+    if not content:
+        return 0, reasons
+
+    if "```" in content or "def " in content or "class " in content:
+        reasons.append("has_code")
+    if "import " in content:
+        reasons.append("imports")
+    if '"""' in content or "'''" in content:
+        reasons.append("docstring")
+    if ": str" in content or ": bool" in content or ": int" in content or "->" in content:
+        reasons.append("type_hints")
+    if "raise" in content or "try" in content:
+        reasons.append("error_handling")
+    if "threading" in content or "thread" in content.lower():
+        reasons.append("threading")
+    if "http.server" in content:
+        reasons.append("used_stdlib_http")
+
+    return len(reasons), reasons
+
+
+def score_planning(result):
+    """Score planning tests: structure, services, endpoints, data_stores, roadmap."""
+    reasons = []
+    content = result.get("content", "")
+    if not content:
+        return 0, reasons
+
+    if "service" in content.lower() or "microservice" in content.lower():
+        reasons.append("has_services")
+    if "endpoint" in content.lower() or "api" in content.lower():
+        reasons.append("has_endpoints")
+    if any(db in content.lower() for db in ["postgresql", "mysql", "mongodb", "redis", "kafka"]):
+        reasons.append("has_datastores")
+    if "month" in content.lower() or "phase" in content.lower() or "roadmap" in content.lower():
+        reasons.append("has_roadmap")
+    if "dependency" in content.lower() or "depends" in content.lower():
+        reasons.append("has_dependencies")
+
+    return len(reasons), reasons
+
+
+def score_scraping(result):
+    """Score scraping tests: json_output, valid_json, all_fields, ignores_sponsored."""
+    reasons = []
+    content = result.get("content", "")
+    if not content:
+        return 0, reasons
+
+    # Try to find JSON in the response
+    if "```json" in content or "```" in content:
+        reasons.append("json_output")
+    elif content.strip().startswith("[") or content.strip().startswith("{"):
+        reasons.append("json_output")
+
+    try:
+        parsed = json.loads(content)
+        reasons.append("valid_json")
+        if isinstance(parsed, list):
+            reasons.append(f"valid_json(list,{len(parsed)}items)")
+        else:
+            reasons.append("valid_json(dict)")
+    except json.JSONDecodeError:
+        # Try to extract JSON from markdown
+        import re
+        match = re.search(r'```(?:json)?\s*\n?(.*?)\n?```', content, re.DOTALL)
+        if match:
+            try:
+                parsed = json.loads(match.group(1))
+                reasons.append("valid_json")
+                if isinstance(parsed, list):
+                    reasons.append(f"valid_json(list,{len(parsed)}items)")
+                else:
+                    reasons.append("valid_json(dict)")
+            except json.JSONDecodeError:
+                pass
+
+    return len(reasons), reasons
+
+
+def score_extraction(result):
+    """Score extraction tests: json_output, valid_json, structured fields."""
+    reasons = []
+    content = result.get("content", "")
+    if not content:
+        return 0, reasons
+
+    if content.strip().startswith("{") or "json" in content.lower():
+        reasons.append("json_output")
+
+    try:
+        parsed = json.loads(content)
+        reasons.append("valid_json(dict)")
+    except json.JSONDecodeError:
+        import re
+        match = re.search(r'```(?:json)?\s*\n?(.*?)\n?```', content, re.DOTALL)
+        if match:
+            try:
+                json.loads(match.group(1))
+                reasons.append("valid_json(dict)")
+            except json.JSONDecodeError:
+                pass
+
+    return len(reasons), reasons
+
+
+def score_long_task(result):
+    """Score long tasks: check for each required step."""
+    reasons = []
+    content = result.get("content", "")
+    if not content:
+        return 0, reasons
+
+    if "class Calculator" in content or "class Calculator:" in content:
+        reasons.append("step1_class")
+    if "def add" in content:
+        reasons.append("step2_add")
+    if "def subtract" in content:
+        reasons.append("step2_sub")
+    if "def multiply" in content:
+        reasons.append("step2_mul")
+    if "def divide" in content:
+        reasons.append("step2_div")
+    if "history" in content.lower():
+        reasons.append("step3_history")
+    if "def undo" in content:
+        reasons.append("step4_undo")
+    if "ValueError" in content or "TypeError" in content:
+        reasons.append("step5_errors")
+    if "__main__" in content or "if __name__" in content:
+        reasons.append("step6_demo")
+    if "add" in content and "subtract" in content and "multiply" in content and "divide" in content:
+        reasons.append("all_operations")
+    if "datetime" in content or "timestamp" in content.lower():
+        reasons.append("timestamps")
+    if "_value" in content:
+        reasons.append("value_tracking")
+
+    return len(reasons), reasons
+
+
+SCORERS = {
+    "Coding": score_coding,
+    "Planning": score_planning,
+    "Web Scraping": score_scraping,
+    "Info Extraction": score_extraction,
+    "Long Task": score_long_task,
+}
 
 
 # ============================================================
 # API Call Helper
 # ============================================================
 
-def call_model(cfg, prompt, max_retries=2, max_tokens=4096):
-    """Call model API with retries and exponential backoff."""
-    client = cfg["client"]
-    model = cfg["model"]
-
+def call_model(client, model, prompt, max_retries=2):
+    """Call the model API with retry logic."""
     for attempt in range(max_retries + 1):
         try:
-            start = time.time()
             response = client.chat.completions.create(
                 model=model,
                 messages=[{"role": "user", "content": prompt}],
-                temperature=0.1,
-                max_tokens=max_tokens,
+                temperature=0.2,
             )
-            elapsed = time.time() - start
             content = response.choices[0].message.content or ""
             return {
                 "success": True,
-                "elapsed": round(elapsed, 2),
                 "content": content,
-                "length": len(content),
                 "attempts": attempt + 1,
+                "length": len(content),
             }
         except Exception as e:
-            err = str(e)
             if attempt < max_retries:
-                wait = 10 * (attempt + 1)
-                print(f"      ⚠️  Retry {attempt+1}/{max_retries} in {wait}s: {err[:100]}")
-                time.sleep(wait)
+                time.sleep(2 ** attempt)
             else:
-                return {"success": False, "error": err[:200]}
+                return {
+                    "success": False,
+                    "error": str(e),
+                    "attempts": attempt + 1,
+                    "content": "",
+                    "length": 0,
+                }
 
 
 # ============================================================
-# Scoring Functions
+# Benchmark Runner
 # ============================================================
 
-def score_coding(content, test_id):
-    """Score coding response quality (max ~10)."""
-    score = 0
-    reasons = []
+def run_benchmark():
+    init_clients()
 
-    has_code = "```" in content or "def " in content or "class " in content
-    if has_code:
-        score += 2
-        reasons.append("has_code")
+    results = {}
 
-    if "import " in content or "from " in content:
-        score += 1
-        reasons.append("imports")
+    for model_id, cfg in MODELS.items():
+        print(f"\n{'='*60}")
+        print(f"  Testing: {cfg['label']} ({model_id})")
+        print(f"{'='*60}")
 
-    if '"""' in content or "'''" in content:
-        score += 1
-        reasons.append("docstring")
+        if not cfg["api_key"]:
+            print(f"  ⚠️  Skipping {model_id}: API key not set (set BENCHMARK_{model_id.upper().replace('-', '_')}_API_KEY)")
+            results[model_id] = {
+                "label": cfg["label"],
+                "model": cfg["model"],
+                "base_url": cfg["base_url"],
+                "error": "API key not configured",
+                "results": {},
+            }
+            continue
 
-    if "->" in content and (": str" in content or ": int" in content or ": bool" in content):
-        score += 1
-        reasons.append("type_hints")
+        model_results = {}
+        client = cfg["client"]
+        model = cfg["model"]
 
-    if "try" in content and "except" in content:
-        score += 1
-        reasons.append("error_handling")
+        # Run all standard tests
+        for test in ALL_TESTS:
+            tid = test["id"]
+            cat = test["category"]
+            name = test["name"]
+            print(f"\n  [{cat}] {name}...", end=" ", flush=True)
 
-    # Test-specific scoring
-    if test_id == "code-medium" and ("OrderedDict" in content or "collections" in content):
-        score += 1
-        reasons.append("used_ordereddict")
+            start = time.time()
+            result = call_model(client, model, test["prompt"])
+            elapsed = time.time() - start
 
-    if test_id == "code-complex" and ("http.server" in content or "HTTPServer" in content):
-        score += 1
-        reasons.append("used_stdlib_http")
-
-    if test_id == "code-debug":
-        bug_keywords = ["bug", "fix", "issue", "problem", "error", "correct", "infinite", "stack"]
-        found = [w for w in bug_keywords if w in content.lower()]
-        if len(found) >= 3:
-            score += 2
-            reasons.append(f"identified_bugs:{len(found)}")
-        elif found:
-            score += 1
-
-    if test_id == "code-review":
-        checks = {
-            "sql_injection": "sql injection" in content.lower(),
-            "md5": "md5" in content.lower(),
-            "debug_mode": "debug" in content.lower() and "false" in content.lower(),
-            "path_traversal": "path" in content.lower() and "traversal" in content.lower(),
-            "xss": "xss" in content.lower() or "cross" in content.lower(),
-            "hashlib": "hashlib" in content.lower() or "bcrypt" in content.lower(),
-        }
-        found_checks = [k for k, v in checks.items() if v]
-        score += min(len(found_checks), 4)
-        if found_checks:
-            reasons.append(f"found:{','.join(found_checks)}")
-
-    return score, reasons
-
-
-def score_planning(content):
-    """Score planning quality (max ~8)."""
-    score = 0
-    reasons = []
-
-    if "phase" in content.lower() or "milestone" in content.lower():
-        score += 1
-        reasons.append("phased")
-
-    if "week" in content.lower() or "month" in content.lower() or "day" in content.lower():
-        score += 1
-        reasons.append("has_timeline")
-
-    if "dependency" in content.lower() or "depend" in content.lower():
-        score += 1
-        reasons.append("dependencies")
-
-    if "postgresql" in content.lower() or "redis" in content.lower() or "kafka" in content.lower():
-        score += 1
-        reasons.append("concrete_tech")
-
-    lines = content.split("\n")
-    bullet_count = sum(1 for l in lines if l.strip().startswith(("- ", "* ", "+ ", "1.", "2.")))
-    if bullet_count > 8:
-        score += 2
-        reasons.append(f"well_structured({bullet_count})")
-    elif bullet_count > 3:
-        score += 1
-        reasons.append(f"structured({bullet_count})")
-
-    word_count = len(content.split())
-    if word_count > 200:
-        score += 1
-        reasons.append("detailed")
-
-    return min(score, 8), reasons
-
-
-def score_scraping(content, test_id):
-    """Score scraping/extraction quality (max ~8)."""
-    score = 0
-    reasons = []
-
-    has_json = ("{" in content and "}" in content) or ("[" in content and "]" in content)
-    if has_json:
-        score += 2
-        reasons.append("json_output")
-
-    # Try to find and parse JSON block
-    try:
-        # Find JSON-like content
-        for start_char, end_char in [("{", "}"), ("[", "]")]:
-            start = content.find(start_char)
-            end = content.rfind(end_char)
-            if start >= 0 and end > start:
-                json_str = content[start:end+1]
-                parsed = json.loads(json_str)
-                score += 2
-                reasons.append(f"valid_json({type(parsed).__name__})")
-                break
-    except Exception:
-        if "```json" in content or "```" in content:
-            # Try extracting from markdown code block
-            try:
-                block_start = content.find("```json")
-                if block_start == -1:
-                    block_start = content.find("```")
-                if block_start >= 0:
-                    block_end = content.find("```", block_start + 3)
-                    if block_end > block_start:
-                        json_str = content[block_start:block_end].replace("```json", "").replace("```", "").strip()
-                        parsed = json.loads(json_str)
-                        score += 2
-                        reasons.append("valid_json_md")
-            except Exception:
-                pass
-
-    return min(score, 8), reasons
-
-
-def score_extraction(content):
-    """Score information extraction quality."""
-    return score_scraping(content, "extract")
-
-
-def score_long_task(content):
-    """Score long task completion (max ~12)."""
-    score = 0
-    reasons = []
-
-    # Check how many steps are implemented
-    step_indicators = {
-        "class Calculator": "step1_class",
-        "def add": "step2_add",
-        "def subtract": "step2_sub",
-        "def multiply": "step2_mul",
-        "def divide": "step2_div",
-        "get_history": "step3_history",
-        "def undo": "step4_undo",
-        "try" in content and "except" in content: "step5_errors",
-        "if __name__": "step6_demo",
-    }
-    for indicator, step_name in step_indicators.items():
-        if isinstance(indicator, str):
-            if indicator in content:
-                score += 1
-                reasons.append(step_name)
-        elif indicator:  # bool expression
-            score += 1
-            reasons.append(step_name)
-
-    has_all_ops = all(op in content for op in ["def add", "def subtract", "def multiply", "def divide"])
-    if has_all_ops:
-        score += 1
-        reasons.append("all_operations")
-
-    # Check for history tracking
-    if "timestamp" in content.lower() or "datetime" in content.lower():
-        score += 1
-        reasons.append("timestamps")
-
-    # Check for value tracking
-    if "_value" in content:
-        score += 1
-        reasons.append("value_tracking")
-
-    return min(score, 12), reasons
-
-
-# ============================================================
-# Timing Test Runner
-# ============================================================
-
-def run_timing_tests(cfg, tests):
-    """Run timing/scheduled tests with multiple iterations."""
-    results = []
-    for test in tests:
-        runs = test.get("runs", 3)
-        times = []
-        print(f"    [{test['id']}] {test['name']} ({runs} runs):", end=" ", flush=True)
-        for i in range(runs):
-            result = call_model(cfg, test["prompt"], max_tokens=200)
             if result["success"]:
-                times.append(result["elapsed"])
-        print(f"{' '.join(f'{t:.1f}s' for t in times)}" if times else "ALL FAILED")
+                scorer = SCORERS.get(cat, lambda r: (0, []))
+                score, reasons = scorer(result)
+                result["elapsed"] = round(elapsed, 2)
+                result["score"] = score
+                result["score_reasons"] = reasons
+                result["content_preview"] = result["content"][:200]
+                del result["content"]  # Don't store full content in results file
+                model_results[tid] = result
+                print(f"✓ ({elapsed:.1f}s, score={score})")
+            else:
+                result["elapsed"] = round(elapsed, 2)
+                model_results[tid] = result
+                print(f"✗ ({elapsed:.1f}s) - {result.get('error', 'unknown')}")
 
-        if len(times) >= 2:
-            avg_time = sum(times) / len(times)
-            min_time = min(times)
-            max_time = max(times)
-            variance = sum((t - avg_time) ** 2 for t in times) / len(times)
+        # Run timing tests
+        timing_results = []
+        for tdef in TIMING_TESTS:
+            tid = tdef["id"]
+            name = tdef["name"]
+            runs = tdef.get("runs", 3)
+            print(f"\n  [Timing] {name}...", end=" ", flush=True)
 
-            results.append({
-                "id": test["id"],
-                "name": test["name"],
-                "success": True,
-                "runs": runs,
-                "completed": len(times),
-                "avg_time": round(avg_time, 2),
-                "min_time": round(min_time, 2),
-                "max_time": round(max_time, 2),
-                "variance": round(variance, 2),
-                "std_dev": round(variance ** 0.5, 2),
-                "times": [round(t, 2) for t in times],
-                "consistent": variance < (avg_time * 0.3),
-            })
-        elif len(times) == 1:
-            results.append({
-                "id": test["id"], "name": test["name"],
-                "success": True, "runs": runs, "completed": 1,
-                "avg_time": times[0], "times": times,
-            })
-        else:
-            results.append({"id": test["id"], "name": test["name"], "success": False})
+            times = []
+            completed = 0
+            for i in range(runs):
+                start = time.time()
+                result = call_model(client, model, tdef["prompt"], max_retries=1)
+                elapsed = time.time() - start
+                if result["success"]:
+                    times.append(round(elapsed, 2))
+                    completed += 1
+
+            if times:
+                avg = sum(times) / len(times)
+                variance = sum((t - avg) ** 2 for t in times) / len(times)
+                timing_results.append({
+                    "id": tid,
+                    "name": name,
+                    "success": True,
+                    "runs": runs,
+                    "completed": completed,
+                    "avg_time": round(avg, 2),
+                    "min_time": round(min(times), 2),
+                    "max_time": round(max(times), 2),
+                    "variance": round(variance, 2),
+                    "std_dev": round(variance ** 0.5, 2),
+                    "times": times,
+                    "consistent": variance < 1.0,
+                })
+                print(f"✓ avg={avg:.1f}s (n={completed}/{runs})")
+            else:
+                timing_results.append({
+                    "id": tid,
+                    "name": name,
+                    "success": False,
+                    "runs": runs,
+                    "completed": 0,
+                })
+                print("✗ all failed")
+
+        model_results["Timing"] = timing_results
+
+        results[model_id] = {
+            "label": cfg["label"],
+            "model": cfg["model"],
+            "base_url": cfg["base_url"],
+            "results": model_results,
+        }
 
     return results
+
+
+def print_summary(results):
+    """Print a summary table of results."""
+    print(f"\n\n{'='*80}")
+    print(f"  BENCHMARK SUMMARY")
+    print(f"{'='*80}")
+
+    for model_id, data in results.items():
+        if "error" in data:
+            print(f"\n  {data['label']}: SKIPPED ({data['error']})")
+            continue
+
+        model_results = data["results"]
+        print(f"\n  {data['label']} ({model_id}):")
+
+        # Categorize results
+        for test_id, result in model_results.items():
+            if test_id == "Timing":
+                continue
+            if isinstance(result, dict) and "success" in result:
+                status = "✓" if result["success"] else "✗"
+                score = result.get("score", "N/A")
+                elapsed = result.get("elapsed", "N/A")
+                print(f"    {status} {test_id}: score={score}, time={elapsed}s")
+
+        # Timing summary
+        timing = model_results.get("Timing", [])
+        if timing:
+            for t in timing:
+                if t.get("success"):
+                    print(f"    ⏱  {t['name']}: avg={t['avg_time']}s, consistent={t['consistent']}")
+
+
+def save_results(results, filepath=None):
+    """Save results to a JSON file."""
+    if filepath is None:
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filepath = f"benchmark_deepseek_vs_mimo_{timestamp}.json"
+
+    with open(filepath, "w", encoding="utf-8") as f:
+        json.dump(results, f, indent=2, ensure_ascii=False)
+
+    print(f"\n  Results saved to: {filepath}")
+    return filepath
 
 
 # ============================================================
 # Main
 # ============================================================
 
-def main():
-    print("=" * 80)
-    print("  DeepSeek V4 Pro  vs  MiMo V2.5 Pro  —  全面基准对比")
-    print("=" * 80)
-    print(f"  启动时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-    print(f"  测试维度: Coding | Planning | Web Scraping | Info Extraction | Long Task | Timing")
-    print("=" * 80)
-
-    init_clients()
-
-    all_results = {}
-
-    for model_id, cfg in MODELS.items():
-        print(f"\n{'='*60}")
-        print(f"  🔵 测试模型: {cfg['label']} ({cfg['model']})")
-        print(f"{'='*60}")
-
-        model_results = {}
-
-        for group_name, tests in ALL_TEST_GROUPS:
-            print(f"\n  ── {group_name} ──")
-
-            if group_name == "Timing":
-                model_results[group_name] = run_timing_tests(cfg, tests)
-                continue
-
-            for test in tests:
-                tid = test["id"]
-                print(f"    [{tid}] {test['name']}...", end=" ", flush=True)
-                result = call_model(cfg, test["prompt"])
-
-                if result["success"]:
-                    # Score the response
-                    score_funcs = {
-                        "Coding": lambda c: score_coding(c, tid),
-                        "Planning": score_planning,
-                        "Web Scraping": lambda c: score_scraping(c, tid),
-                        "Info Extraction": score_extraction,
-                        "Long Task": score_long_task,
-                    }
-                    score_fn = score_funcs.get(group_name, lambda c: (0, []))
-                    score, reasons = score_fn(result["content"])
-
-                    result["score"] = score
-                    result["score_reasons"] = reasons
-                    print(f"✅ {result['elapsed']:.1f}s | {result['length']}chars | score={score} | {reasons}")
-
-                    # Keep first 500 chars for manual inspection, discard rest
-                    result["content_preview"] = result["content"][:500]
-                    result.pop("content", None)
-                else:
-                    print(f"❌ {result.get('error', 'unknown')[:80]}")
-
-                model_results[tid] = result
-                time.sleep(1)
-
-        all_results[model_id] = model_results
-
-    # ============================================================
-    # Report Generation
-    # ============================================================
-    print("\n\n" + "=" * 80)
-    print("  📊 对比报告")
-    print("=" * 80)
-
-    model_ids = list(MODELS.keys())
-
-    # Per-dimension detailed comparison
-    for group_name, tests in ALL_TEST_GROUPS:
-        print(f"\n{'─'*60}")
-        print(f"  📌 {group_name}")
-        print(f"{'─'*60}")
-
-        if group_name == "Timing":
-            for mid in model_ids:
-                timing_results = all_results.get(mid, {}).get(group_name, [])
-                for r in timing_results:
-                    if r.get("success") and r.get("completed", 0) >= 1:
-                        status = "🟢 STABLE" if r.get("consistent") else "🟡 VARIABLE"
-                        print(f"    {MODELS[mid]['label']:22s} {r['name']:24s} "
-                              f"avg={r.get('avg_time',0):.1f}s σ={r.get('std_dev',0):.1f}s "
-                              f"[{r.get('min_time',0):.1f}s–{r.get('max_time',0):.1f}s] {status}")
-                    else:
-                        print(f"    {MODELS[mid]['label']:22s} {r['name']:24s} ❌")
-            continue
-
-        for test in tests:
-            tid = test["id"]
-            print(f"\n  [{tid}] {test['name']}")
-
-            # Collect both results for side-by-side
-            for mid in model_ids:
-                r = all_results.get(mid, {}).get(tid, {})
-                if r.get("success"):
-                    label = MODELS[mid]['label']
-                    print(f"    {label:22s} ⏱{r['elapsed']:.1f}s  📏{r['length']}chars  "
-                          f"⭐{r.get('score','-')}  {r.get('score_reasons',[])}")
-                else:
-                    print(f"    {MODELS[mid]['label']:22s} ❌ {r.get('error','failed')[:60]}")
-
-    # Overall summary
-    print(f"\n{'='*80}")
-    print(f"  📈 综合对比 Summary")
-    print(f"{'='*80}")
-
-    for mid in model_ids:
-        total_score = 0
-        total_time = 0
-        total_tests_done = 0
-        success_count = 0
-        model_data = all_results.get(mid, {})
-
-        for group_name, tests in ALL_TEST_GROUPS:
-            if group_name == "Timing":
-                for r in model_data.get(group_name, []):
-                    if r.get("success"):
-                        n = r.get("completed", r.get("runs", 1))
-                        total_time += r.get("avg_time", 0) * n
-                        total_tests_done += n
-                        success_count += n
-                continue
-
-            for test in tests:
-                r = model_data.get(test["id"], {})
-                if r.get("success"):
-                    total_score += r.get("score", 0)
-                    total_time += r.get("elapsed", 0)
-                    total_tests_done += 1
-                    success_count += 1
-
-        avg_time = total_time / total_tests_done if total_tests_done > 0 else 0
-
-        # Winner indicators
-        print(f"\n  {MODELS[mid]['label']}")
-        print(f"    成功率:     {success_count}/{total_tests_done} ({100*success_count/max(total_tests_done,1):.0f}%)")
-        print(f"    总分:       {total_score}")
-        print(f"    总耗时:     {total_time:.1f}s")
-        print(f"    平均响应:   {avg_time:.2f}s")
-
-    # Save detailed results
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_file = f"benchmark_deepseek_vs_mimo_{timestamp}.json"
-
-    # Clean results for JSON (remove client objects)
-    clean_results = {}
-    for mid, data in all_results.items():
-        clean_results[mid] = {
-            "label": MODELS[mid]["label"],
-            "model": MODELS[mid]["model"],
-            "base_url": MODELS[mid]["base_url"],
-            "results": data,
-        }
-
-    with open(output_file, "w", encoding="utf-8") as f:
-        json.dump(clean_results, f, indent=2, ensure_ascii=False)
-    print(f"\n  📁 详细结果已保存: {output_file}")
-    print(f"{'='*80}")
-
-
 if __name__ == "__main__":
-    main()
+    print("=" * 60)
+    print("  DeepSeek V4 Pro vs MiMo V2.5 Pro — Benchmark")
+    print("=" * 60)
+    print(f"  Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print()
+
+    # Check API keys
+    missing = []
+    for mid, cfg in MODELS.items():
+        if not cfg["api_key"]:
+            env_var = f"BENCHMARK_{mid.upper().replace('-', '_')}_API_KEY"
+            missing.append(f"{cfg['label']} ({env_var})")
+
+    if missing:
+        print("  ⚠️  Missing API keys for: " + ", ".join(missing))
+        print("  Set the corresponding environment variables and retry.")
+        if len(missing) == len(MODELS):
+            print("  No models configured. Exiting.")
+            sys.exit(1)
+        print()
+
+    results = run_benchmark()
+    print_summary(results)
+    save_results(results)

@@ -1,0 +1,573 @@
+好的，这个功能非常实用！我们来为你的财务工具添加一个月的收支统计和预算提醒。
+
+为了实现这个，我们需要：
+
+1.  **修改 HTML 结构：** 在页面上添加一个区域来显示月度统计信息和预算提醒。
+2.  **编写 JavaScript 逻辑：**
+    *   读取所有交易记录。
+    *   筛选出当前月份的交易。
+    *   计算当前月的总收入、总支出。
+    *   计算当前月剩余预算。
+    *   根据预算情况显示不同的提醒样式。
+
+---
+
+### **第一步：更新 HTML 结构**
+
+请用下面的代码替换你 `index.html` 文件中 `<div class="balance-summary">` 之后，`<section class="add-transaction">` 之前的内容。我还在 `style` 标签里添加了一些新的 CSS 样式来美化统计区和预算提醒。
+
+```html
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的个人财务管家</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f7f6;
+            color: #333;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+        h1, h2 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .balance-summary {
+            text-align: center;
+            padding: 15px;
+            background-color: #e0f2f1;
+            border-radius: 5px;
+            margin-bottom: 25px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+        .balance-summary span {
+            font-size: 2em;
+            font-weight: bold;
+            color: #00796b;
+        }
+        
+        /* 新增的月度统计样式 */
+        .monthly-summary {
+            background-color: #fce4ec; /* 浅粉色背景 */
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            text-align: center;
+        }
+        .monthly-summary h2 {
+            color: #c2185b; /* 深粉色标题 */
+            margin-bottom: 15px;
+            font-size: 1.5em;
+        }
+        .monthly-stats div {
+            margin-bottom: 10px;
+            font-size: 1.1em;
+        }
+        .monthly-stats strong {
+            color: #880e4f; /* 更深的粉色 */
+        }
+        .budget-alert {
+            margin-top: 15px;
+            padding: 10px;
+            border-radius: 5px;
+            font-weight: bold;
+            font-size: 1.3em;
+            text-align: center;
+        }
+        .budget-alert.over {
+            background-color: #ffebee; /* 红色背景 */
+            color: #d32f2f; /* 红色字体 */
+            border: 1px solid #ef9a9a;
+        }
+        .budget-alert.within {
+            background-color: #e8f5e9; /* 绿色背景 */
+            color: #388e3c; /* 绿色字体 */
+            border: 1px solid #a5d6a7;
+        }
+
+        .add-transaction, .transaction-list {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #e0e0e0;
+            border-radius: 5px;
+            background-color: #fcfcfc;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        .form-group input[type="number"],
+        .form-group input[type="date"],
+        .form-group select,
+        .form-group textarea {
+            width: calc(100% - 12px); /* 减去padding */
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box; /* 保持宽度一致 */
+        }
+        .form-group input[type="radio"] {
+            margin-right: 5px;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4ph;
+            cursor: pointer;
+            font-size: 16px;
+            width: 100%;
+            transition: background-color 0.3s ease;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+            color: #555;
+        }
+        /* 针对手机等小屏幕设备的响应式调整 */
+        @media (max-width: 600px) {
+            .container {
+                margin: 10px;
+                padding: 15px;
+            }
+            button {
+                padding: 12px 10px;
+            }
+            th, td {
+                padding: 8px;
+                font-size: 0.9em;
+            }
+            /* 隐藏一些列以节省空间 */
+            .transaction-list table thead th:nth-child(5), /* 备注 */
+            .transaction-list table tbody td:nth-child(5) {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>我的个人财务管家</h1>
+
+        <div class="balance-summary">
+            <h2>当前总余额: <span id="current-balance">0.00</span> 元</h2>
+        </div>
+
+        <!-- 新增的月度统计区域 -->
+        <section class="monthly-summary">
+            <h2>本月概览</h2>
+            <div class="monthly-stats">
+                <div>本月收入: <strong id="monthly-income">0.00</strong> 元</div>
+                <div>本月支出: <strong id="monthly-expense">0.00</strong> 元</div>
+                <div>本月结余: <strong id="monthly-balance">0.00</strong> 元</div>
+            </div>
+            <div class="budget-alert" id="budget-alert">
+                <!-- 预算提醒将在这里显示 -->
+            </div>
+        </section>
+
+        <section class="add-transaction">
+            <h2>添加新记录</h2>
+            <form id="transaction-form">
+                <div class="form-group">
+                    <label for="type">类型:</label>
+                    <input type="radio" id="type-income" name="transaction-type" value="income" checked>
+                    <label for="type-income">收入</label>
+                    <input type="radio" id="type-expense" name="transaction-type" value="expense">
+                    <label for="type-expense">支出</label>
+                </div>
+
+                <div class="form-group">
+                    <label for="amount">金额:</label>
+                    <input type="number" id="amount" step="0.01" min="0.01" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="category">类别:</label>
+                    <select id="category" required>
+                        <!-- 收入类别 -->
+                        <optgroup label="收入">
+                            <option value="工资">工资</option>
+                            <option value="兼职">兼职</option>
+                            <option value="投资">投资</option>
+                            <option value="礼金">礼金</option>
+                            <option value="其他收入">其他收入</option>
+                        </optgroup>
+                        <!-- 支出类别 -->
+                        <optgroup label="支出">
+                            <option value="餐饮">餐饮</option>
+                            <option value="交通">交通</option>
+                            <option value="购物">购物</option>
+                            <option value="娱乐">娱乐</option>
+                            <option value="学习">学习</option>
+                            <option value="住房">住房</option>
+                            <option value="医疗">医疗</option>
+                            <option value="其他支出">其他支出</option>
+                        </optgroup>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="date">日期:</label>
+                    <input type="date" id="date" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="description">备注 (可选):</label>
+                    <textarea id="description" rows="3"></textarea>
+                </div>
+
+                <button type="submit">添加记录</button>
+            </form>
+        </section>
+
+        <section class="transaction-list">
+            <h2>历史交易</h2>
+            <table id="transactions-table">
+                <thead>
+                    <tr>
+                        <th>类型</th>
+                        <th>金额</th>
+                        <th>类别</th>
+                        <th>日期</th>
+                        <th>备注</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="transactions-body">
+                    <!-- 交易记录将在这里动态加载 -->
+                </tbody>
+            </table>
+        </section>
+
+    </div>
+
+    <script>
+        // JavaScript 代码将在这里补充
+    </script>
+</body>
+</html>
+```
+
+---
+
+### **第二步：编写 JavaScript 逻辑**
+
+现在，我们来填充 `script` 标签内的 JavaScript 代码。这段代码会处理数据存储、显示和你的月度统计功能。
+
+请**删除**你 `index.html` 文件中现有的 `<script>` 标签内的所有内容（包括 `document.addEventListener` 和 `updateCategoryOptions` 函数），然后将下面的完整 JavaScript 代码复制粘贴到 `<script>` 标签内。
+
+```javascript
+// 全局变量，用于存储所有交易记录
+let transactions = [];
+// 每月预算
+const MONTHLY_BUDGET = 5000; 
+
+// 获取DOM元素
+const balanceDisplay = document.getElementById('current-balance');
+const transactionForm = document.getElementById('transaction-form');
+const transactionsBody = document.getElementById('transactions-body');
+const dateInput = document.getElementById('date');
+
+// 月度统计元素
+const monthlyIncomeDisplay = document.getElementById('monthly-income');
+const monthlyExpenseDisplay = document.getElementById('monthly-expense');
+const monthlyBalanceDisplay = document.getElementById('monthly-balance');
+const budgetAlert = document.getElementById('budget-alert');
+
+// --- 辅助函数 ---
+
+// 格式化金额，保留两位小数
+function formatAmount(amount) {
+    return parseFloat(amount).toFixed(2);
+}
+
+// 获取当前月份的字符串，格式为 YYYY-MM
+function getCurrentMonthString() {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    return `${year}-${month}`;
+}
+
+// --- 数据操作与存储 ---
+
+// 从 localStorage 加载交易记录
+function loadTransactions() {
+    const storedTransactions = localStorage.getItem('transactions');
+    if (storedTransactions) {
+        transactions = JSON.parse(storedTransactions);
+    }
+}
+
+// 保存交易记录到 localStorage
+function saveTransactions() {
+    localStorage.setItem('transactions', JSON.stringify(transactions));
+}
+
+// --- 核心功能函数 ---
+
+// 计算并显示总余额
+function updateBalance() {
+    let totalBalance = 0;
+    transactions.forEach(transaction => {
+        if (transaction.type === 'income') {
+            totalBalance += transaction.amount;
+        } else {
+            totalBalance -= transaction.amount;
+        }
+    });
+    balanceDisplay.textContent = formatAmount(totalBalance);
+}
+
+// 渲染交易列表
+function renderTransactions() {
+    transactionsBody.innerHTML = ''; // 清空现有列表
+    transactions.forEach((transaction, index) => {
+        const row = transactionsBody.insertRow();
+        const typeCell = row.insertCell(0);
+        const amountCell = row.insertCell(1);
+        const categoryCell = row.insertCell(2);
+        const dateCell = row.insertCell(3);
+        const descriptionCell = row.insertCell(4);
+        const actionCell = row.insertCell(5);
+
+        typeCell.textContent = transaction.type === 'income' ? '收入' : '支出';
+        typeCell.style.color = transaction.type === 'income' ? '#28a745' : '#dc3545'; // 收入绿色，支出红色
+        
+        amountCell.textContent = formatAmount(transaction.amount);
+        amountCell.style.color = transaction.type === 'income' ? '#28a745' : '#dc3545';
+
+        categoryCell.textContent = transaction.category;
+        dateCell.textContent = transaction.date;
+        descriptionCell.textContent = transaction.description;
+
+        const deleteButton = document.createElement('button');
+        deleteButton.textContent = '删除';
+        deleteButton.classList.add('delete-btn'); // 添加一个类，方便样式控制
+        deleteButton.onclick = () => deleteTransaction(index);
+        actionCell.appendChild(deleteButton);
+    });
+}
+
+// 删除交易记录
+function deleteTransaction(index) {
+    if (confirm('确定要删除这笔记录吗？')) {
+        transactions.splice(index, 1); // 从数组中删除
+        saveTransactions();
+        initApp(); // 重新加载和更新所有数据
+    }
+}
+
+// 计算并显示月度统计
+function updateMonthlySummary() {
+    const currentMonth = getCurrentMonthString();
+    let monthlyIncome = 0;
+    let monthlyExpense = 0;
+
+    transactions.forEach(transaction => {
+        // 检查交易日期是否属于当前月份
+        if (transaction.date.startsWith(currentMonth)) {
+            if (transaction.type === 'income') {
+                monthlyIncome += transaction.amount;
+            } else {
+                monthlyExpense += transaction.amount;
+            }
+        }
+    });
+
+    const monthlyBalance = monthlyIncome - monthlyExpense;
+    const remainingBudget = MONTHLY_BUDGET - monthlyExpense;
+
+    monthlyIncomeDisplay.textContent = formatAmount(monthlyIncome);
+    monthlyExpenseDisplay.textContent = formatAmount(monthlyExpense);
+    monthlyBalanceDisplay.textContent = formatAmount(monthlyBalance);
+
+    // 预算提醒
+    budgetAlert.classList.remove('over', 'within'); // 清除之前的样式
+    if (remainingBudget < 0) {
+        budgetAlert.textContent = `🚨 预算超支 ${formatAmount(Math.abs(remainingBudget))} 元！请注意。`;
+        budgetAlert.classList.add('over');
+    } else {
+        budgetAlert.textContent = `本月预算剩余 ${formatAmount(remainingBudget)} 元。`;
+        budgetAlert.classList.add('within');
+    }
+}
+
+
+// 根据选择的类型更新类别下拉框的可用选项
+function updateCategoryOptions(type) {
+    const categorySelect = document.getElementById('category');
+    // 获取当前选中的值
+    const currentSelectedValue = categorySelect.value;
+    let newSelectionMade = false;
+
+    Array.from(categorySelect.children).forEach(optgroup => {
+        if (optgroup.tagName === 'OPTGROUP') {
+            if (optgroup.label === '收入' && type === 'expense') {
+                optgroup.style.display = 'none';
+            } else if (optgroup.label === '支出' && type === 'income') {
+                optgroup.style.display = 'none';
+            } else {
+                optgroup.style.display = ''; // 显示对应类别
+            }
+        }
+    });
+
+    // 检查之前选中的值是否在当前可见的类别中
+    // 如果不在，则尝试选中第一个可见的类别
+    let foundCurrent = false;
+    for (let i = 0; i < categorySelect.options.length; i++) {
+        const option = categorySelect.options[i];
+        if (option.value === currentSelectedValue && option.parentNode.style.display !== 'none') {
+            foundCurrent = true;
+            break;
+        }
+    }
+    
+    if (!foundCurrent) {
+        for (let i = 0; i < categorySelect.options.length; i++) {
+            const option = categorySelect.options[i];
+            if (option.parentNode.style.display !== 'none') {
+                categorySelect.selectedIndex = i;
+                newSelectionMade = true;
+                break;
+            }
+        }
+    }
+    // 如果之前的值依然可见，或者找到了新的默认值，则无需额外操作
+}
+
+
+// --- 事件监听 ---
+
+// 表单提交处理
+transactionForm.addEventListener('submit', (event) => {
+    event.preventDefault(); // 阻止表单默认提交行为（页面刷新）
+
+    const type = document.querySelector('input[name="transaction-type"]:checked').value;
+    const amount = parseFloat(document.getElementById('amount').value);
+    const category = document.getElementById('category').value;
+    const date = document.getElementById('date').value;
+    const description = document.getElementById('description').value.trim();
+
+    if (isNaN(amount) || amount <= 0) {
+        alert('请输入有效的金额！');
+        return;
+    }
+
+    const newTransaction = {
+        type,
+        amount,
+        category,
+        date,
+        description,
+        id: Date.now() // 为每笔交易生成一个唯一ID，方便将来操作
+    };
+
+    transactions.push(newTransaction);
+    saveTransactions();
+    transactionForm.reset(); // 清空表单
+    // 重置类型选择和类别
+    document.getElementById('type-income').checked = true;
+    updateCategoryOptions('income');
+    // 重新设置日期为今天
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    dateInput.value = `${year}-${month}-${day}`;
+
+    initApp(); // 重新加载和更新所有数据
+});
+
+// 监听类型（收入/支出）选择的变化
+document.querySelectorAll('input[name="transaction-type"]').forEach(radio => {
+    radio.addEventListener('change', (event) => {
+        updateCategoryOptions(event.target.value);
+    });
+});
+
+// --- 初始化函数 ---
+
+// 应用初始化
+function initApp() {
+    loadTransactions();      // 1. 加载所有记录
+    updateBalance();         // 2. 更新总余额
+    renderTransactions();    // 3. 渲染交易列表
+    updateMonthlySummary();  // 4. 更新月度统计和预算提醒
+}
+
+// 页面加载完成后执行
+document.addEventListener('DOMContentLoaded', () => {
+    // 设置日期输入框的默认值为今天
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, '0');
+    const day = String(today.getDate()).padStart(2, '0');
+    dateInput.value = `${year}-${month}-${day}`;
+    
+    // 默认选中收入，并根据类型调整类别选择
+    document.getElementById('type-income').checked = true;
+    updateCategoryOptions('income');
+
+    initApp(); // 启动应用
+});
+
+```
+
+---
+
+### **第三步：保存并刷新页面**
+
+1.  保存你的 `index.html` 文件。
+2.  回到你的浏览器，刷新页面。
+
+现在，你应该能看到：
+
+*   **新增的“本月概览”区域**，显示本月收入、支出和结余。
+*   **预算提醒**：如果你的本月支出超过了 5000 元预算，它会显示红色的大字提醒；否则会显示绿色字体表示预算剩余。
+*   当你添加新的交易记录时，所有这些统计数据都会实时更新。
+*   **删除功能：** 每条记录后面都有一个“删除”按钮，点击可以删除该记录，数据也会相应更新。
+*   **金额颜色：** 收入金额显示绿色，支出金额显示红色，更容易区分。
+
+---
+
+### **功能说明：**
+
+*   **`transactions` 数组：** 所有财务记录都存储在这个 JavaScript 数组中。
+*   **`localStorage`：** 每次添加、删除记录后，数据都会自动保存到你的浏览器本地存储中。下次你打开这个 `index.html` 文件，记录依然存在。
+*   **`MONTHLY_BUDGET`：** 你可以在 JavaScript 代码的顶部找到并修改这个常量，来设置你的每月预算。
+*   **`updateMonthlySummary()`：** 这个函数负责计算本月（当前年月的）收入、支出和结余，并根据 `MONTHLY_BUDGET` 判断是否超支，然后更新页面上的显示。
+
+现在你已经有了一个功能更完善的个人财务管理工具了！如果你有新的想法或遇到任何问题，随时告诉我。

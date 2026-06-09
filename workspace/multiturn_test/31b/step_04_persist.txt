@@ -1,0 +1,371 @@
+这是一个非常关键的转折点！我需要先向你解释一个技术上的“真相”，然后为你提供一个新的解决方案。
+
+### 💡 为什么之前的数据会“消失”？
+
+之前的方案是 **Streamlit (Python)**。它的工作原理是：代码运行在云端服务器上，数据存在服务器的文件里。
+当你关闭浏览器，数据其实还在服务器上，但如果你在 Replit 中使用了临时环境，或者想要一个**完全不需要登录账号、不需要联网、双击就能打开**的工具，那么 Python 方案就不合适了。
+
+**因为 Python 必须在“服务器”上运行，而浏览器本身只能直接运行 HTML/JS。**
+
+### 🚀 终极解决方案：纯本地网页版 (HTML + JavaScript)
+
+为了实现你要求的 **“存到浏览器里”** 且 **“不需要服务器”**，我们需要切换到【方案三】。
+
+我会为你写一个**单文件网页**。你只需要把它保存在你的电脑上，用浏览器打开即可。它使用浏览器自带的 `localStorage`（本地存储）功能——这就像是浏览器给每个网站开的一个小型私人仓库，**只要你不清理浏览器缓存，数据永远在你的电脑里，不会上传到任何服务器。**
+
+#### 🛠️ 操作步骤（非常简单）：
+
+1.  在你的电脑桌面（或任何文件夹）**新建一个文本文档**（.txt 文件）。
+2.  把下面这段代码**全部复制**并粘贴进去。
+3.  保存文件，然后将文件名从 `新建文本文档.txt` **重命名为 `财务管家.html`** (注意后缀必须是 `.html`)。
+4.  **双击这个文件**，它会直接用你的默认浏览器打开。
+
+---
+
+### 💻 完整代码（复制以下全部内容）
+
+```html
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>我的本地个人财务管家</title>
+    <style>
+        :root {
+            --primary-color: #4a90e2;
+            --danger-color: #ff4b4b;
+            --success-color: #2ecc71;
+            --bg-color: #f5f7fa;
+        }
+        body {
+            font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background-color: var(--bg-color);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+        }
+        .container {
+            width: 100%;
+            max-width: 1000px;
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 20px;
+        }
+        /* 左侧表单 */
+        .sidebar {
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            height: fit-content;
+        }
+        h2 { margin-top: 0; color: #333; font-size: 1.2rem; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-size: 14px; color: #666; }
+        input, select {
+            width: 100%;
+            padding: 8px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            box-sizing: border-box;
+        }
+        button {
+            width: 100%;
+            padding: 10px;
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        button:hover { opacity: 0.9; }
+
+        /* 右侧主界面 */
+        .main-content {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        /* 统计看板 */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+        }
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            text-align: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .stat-value { font-size: 24px; font-weight: bold; margin-top: 10px; }
+        
+        /* 预算警告 */
+        #budget-warning {
+            display: none;
+            background-color: var(--danger-color);
+            color: white;
+            padding: 20px;
+            border-radius: 15px;
+            text-align: center;
+            animation: shake 0.5s;
+        }
+        @keyframes shake {
+            0% { transform: translateX(0); }
+            25% { transform: translateX(-5px); }
+            50% { transform: translateX(5px); }
+            75% { transform: translateX(-5px); }
+            100% { transform: translateX(0); }
+        }
+
+        /* 表格 */
+        .history-card {
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            overflow-x: auto;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+        }
+        th, td {
+            text-align: left;
+            padding: 12px;
+            border-bottom: 1px solid #eee;
+        }
+        th { color: #888; font-weight: normal; }
+        .amt-positive { color: var(--success-color); font-weight: bold; }
+        .amt-negative { color: var(--danger-color); font-weight: bold; }
+        
+        .clear-btn {
+            background-color: #999;
+            margin-top: 20px;
+            font-size: 12px;
+            padding: 5px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <!-- 左侧输入区 -->
+    <div class="sidebar">
+        <h2>📝 添加记录</h2>
+        <div class="form-group">
+            <label>日期</label>
+            <input type="date" id="date">
+        </div>
+        <div class="form-group">
+            <label>类型</label>
+            <select id="type" onchange="updateCategories()">
+                <option value="支出">支出</option>
+                <option value="收入">收入</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>类别</label>
+            <select id="category"></select>
+        </div>
+        <div class="form-group">
+            <label>金额</label>
+            <input type="number" id="amount" placeholder="0.00" step="0.01">
+        </div>
+        <div class="form-group">
+            <label>备注</label>
+            <input type="text" id="note" placeholder="可选">
+        </div>
+        <button onclick="addRecord()">提交记录</button>
+        <button class="clear-btn" onclick="clearAll()">🗑️ 清空所有数据</button>
+    </div>
+
+    <!-- 右侧显示区 -->
+    <div class="main-content">
+        <div id="budget-warning">
+            <h1 style="margin:0">⚠️ 预算超支警告！</h1>
+            <p id="warning-text" style="margin:10px 0 0 0; font-size:18px"></p>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <label>本月收入</label>
+                <div id="month-income" class="stat-value">￥0.00</div>
+            </div>
+            <div class="stat-card">
+                <label>本月支出</label>
+                <div id="month-expense" class="stat-value">￥0.00</div>
+            </div>
+            <div class="stat-card">
+                <label>本月结余</label>
+                <div id="month-net" class="stat-value">￥0.00</div>
+            </div>
+        </div>
+
+        <div class="history-card">
+            <h2>📅 历史明细</h2>
+            <div style="margin-bottom: 10px; font-weight: bold;">总余额: <span id="total-balance">￥0.00</span></div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>日期</th>
+                        <th>类别</th>
+                        <th>备注</th>
+                        <th>金额</th>
+                    </tr>
+                </thead>
+                <tbody id="table-body"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- 配置 ---
+    const BUDGET = 5000; 
+    const CATEGORIES = {
+        "支出": ["餐饮", "交通", "购物", "娱乐", "房租/水电", "医疗", "其他支出"],
+        "收入": ["工资", "奖金", "投资", "红包", "其他收入"]
+    };
+
+    // --- 初始化 ---
+    document.getElementById('date').valueAsDate = new Date();
+    updateCategories();
+
+    // 从本地存储加载数据
+    let records = JSON.parse(localStorage.getItem('myFinanceData')) || [];
+
+    function updateCategories() {
+        const type = document.getElementById('type').value;
+        const catSelect = document.getElementById('category');
+        catSelect.innerHTML = '';
+        CATEGORIES[type].forEach(cat => {
+            const opt = document.createElement('option');
+            opt.value = cat;
+            opt.innerHTML = cat;
+            catSelect.appendChild(opt);
+        });
+    }
+
+    function addRecord() {
+        const date = document.getElementById('date').value;
+        const type = document.getElementById('type').value;
+        const category = document.getElementById('category').value;
+        const amount = parseFloat(document.getElementById('amount').value);
+        const note = document.getElementById('note').value;
+
+        if (!date || isNaN(amount) || amount <= 0) {
+            alert("请填写正确的日期和金额！");
+            return;
+        }
+
+        const record = {
+            date,
+            type,
+            category,
+            amount: type === "收入" ? amount : -amount,
+            note
+        };
+
+        records.push(record);
+        localStorage.setItem('myFinanceData', JSON.stringify(records));
+        
+        // 清空输入框
+        document.getElementById('amount').value = '';
+        document.getElementById('note').value = '';
+        
+        render();
+    }
+
+    function clearAll() {
+        if (confirm("确定要删除所有记录吗？此操作不可撤销！")) {
+            records = [];
+            localStorage.removeItem('myFinanceData');
+            render();
+        }
+    }
+
+    function render() {
+        const tbody = document.getElementById('table-body');
+        tbody.innerHTML = '';
+        
+        let totalBalance = 0;
+        let mIncome = 0;
+        let mExpense = 0;
+
+        const now = new Date();
+        const currentMonth = now.getMonth();
+        const currentYear = now.getFullYear();
+
+        // 排序：日期最近的在上面
+        const sortedRecords = [...records].sort((a, b) => new Date(b.date) - new Date(a.date));
+
+        sortedRecords.forEach(r => {
+            totalBalance += r.amount;
+            
+            const rDate = new Date(r.date);
+            if (rDate.getMonth() === currentMonth && rDate.getFullYear() === currentYear) {
+                if (r.amount > 0) mIncome += r.amount;
+                else mExpense += Math.abs(r.amount);
+            }
+
+            const row = `<tr>
+                <td>${r.date}</td>
+                <td>${r.category}</td>
+                <td>${r.note}</td>
+                <td class="${r.amount > 0 ? 'amt-positive' : 'amt-negative'}">
+                    ${r.amount > 0 ? '+' : ''}${r.amount.toFixed(2)}
+                </td>
+            </tr>`;
+            tbody.innerHTML += row;
+        });
+
+        // 更新统计
+        document.getElementById('total-balance').innerText = `￥${totalBalance.toFixed(2)}`;
+        document.getElementById('month-income').innerText = `￥${mIncome.toFixed(2)}`;
+        document.getElementById('month-expense').innerText = `￥${mExpense.toFixed(2)}`;
+        document.getElementById('month-net').innerText = `￥${(mIncome - mExpense).toFixed(2)}`;
+
+        // 预算警告逻辑
+        const warningDiv = document.getElementById('budget-warning');
+        if (mExpense > BUDGET) {
+            warningDiv.style.display = 'block';
+            document.getElementById('warning-text').innerText = `本月已支出 ￥${mExpense.toFixed(2)}，超过预算 ￥${(mExpense - BUDGET).toFixed(2)}`;
+        } else {
+            warningDiv.style.display = 'none';
+        }
+    }
+
+    // 首次加载运行
+    render();
+</script>
+
+</body>
+</html>
+```
+
+---
+
+### 🌈 这个新版本的神奇之处：
+
+1.  **无需服务器/无需联网**：你不需要 Replit，不需要 Python，不需要任何账号。这个文件就在你的电脑硬盘上。
+2.  **数据持久化 (localStorage)**：我使用了浏览器提供的 `localStorage` 接口。
+    *   当你点击“提交”时，数据会被转化为一段字符串，存在浏览器的内部数据库中。
+    *   即使你关闭浏览器、重启电脑，只要你用同一个浏览器打开这个 `.html` 文件，数据依然在那里。
+3.  **隐私性极高**：你的财务数据**从未离开过你的电脑**，没有任何数据被传输到网络上。
+4.  **依然保留了你的所有需求**：
+    *   收入/支出分类。
+    *   本月统计看板。
+    *   **5000元预算预警**（超支时会出现红色的震动警告框）。
+    *   历史记录列表。
+
+### 🚩 以后怎么管理这个工具？
+*   **想修改预算？** 用“记事本”打开这个 `.html` 文件，搜索 `const BUDGET = 5000;`，把 5000 改掉，保存即可。
+*   **想备份数据？** 目前数据在浏览器缓存里。如果你换了电脑或清理了浏览器所有缓存，数据会丢失。如果你需要备份，以后我可以帮你加上一个“导出为 Excel/CSV”的按钮。
+
+**快试着创建一个 `.html` 文件打开看看吧！是不是感觉顺手多了？**

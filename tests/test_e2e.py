@@ -41,6 +41,12 @@ def test_e2e_file_creation():
             max_retries=2,
             no_llm_reflection=False,
             list_providers=False,
+            think_model=None,
+            execute_model=None,
+            resume=False,
+            dry_run=False,
+            max_llm_calls=0,
+            wall_time_limit=0,
         )
 
         agent = create_agent(args)
@@ -106,6 +112,12 @@ def test_e2e_multi_step_task():
             max_retries=3,
             no_llm_reflection=False,
             list_providers=False,
+            think_model=None,
+            execute_model=None,
+            resume=False,
+            dry_run=False,
+            max_llm_calls=0,
+            wall_time_limit=0,
         )
 
         agent = create_agent(args)
