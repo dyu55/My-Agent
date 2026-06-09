@@ -1,0 +1,24 @@
+name: Notify on Failure
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+    steps:
+      - name: Create failure issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const run = context.payload.workflow_run;
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `CI Failed: ${run.name} #${run.run_number}`,
+              body: `## CI Failure\n\n**Workflow:** ${run.name}\n**Run:** #${run.run_number}\n**Branch:** ${run.head_branch}\n**Commit:** ${run.head_sha.substring(0, 8)}\n\n[View run](${run.html_url})`,
+              labels: ['ci-failure'],
+            });
