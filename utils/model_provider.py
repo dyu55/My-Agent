@@ -97,8 +97,17 @@ class OllamaProvider(BaseModelProvider):
                 "temperature": kwargs.pop("temperature", 0.1),
             }
 
-        response = self.client.chat(**kwargs)
-        return response["message"]["content"]
+        try:
+            response = self.client.chat(**kwargs)
+            return response["message"]["content"]
+        except Exception as e:
+            error_str = str(e).lower()
+            if "connection" in error_str or "refused" in error_str or "timeout" in error_str:
+                raise ConnectionError(
+                    f"Cannot connect to Ollama at {self.base_url}. "
+                    f"Please check: 1) Ollama is running 2) The URL is correct 3) Network is available"
+                ) from e
+            raise
 
     def chat_stream(self, prompt: str, **kwargs) -> Generator[str, None, None]:
         """Stream chat response from Ollama."""
