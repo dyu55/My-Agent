@@ -2,6 +2,6 @@ ollama
 openai>=1,<2
 pydantic>=2,<3
 requests>=2,<3
-rich>=13.0
+rich>=15.0.0
 prompt_toolkit>=3.0
 python-dotenv>=1.0.0
