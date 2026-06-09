@@ -11,6 +11,7 @@ from utils.model_provider import (
 )
 
 try:
+    import anthropic
     from utils.model_provider import AnthropicProvider
     HAS_ANTHROPIC = True
 except ImportError:
