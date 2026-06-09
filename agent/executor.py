@@ -5,8 +5,11 @@ to appropriate tool handlers. It uses modular tool implementations
 from the agent/tools/ package.
 """
 
+import importlib
 import json
 import logging
+import re
+import subprocess
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path

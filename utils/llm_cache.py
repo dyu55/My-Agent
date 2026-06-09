@@ -1,5 +1,6 @@
 """LLM Cache - Caching for LLM responses to reduce costs and improve speed."""
 
+import atexit
 import hashlib
 import json
 import time

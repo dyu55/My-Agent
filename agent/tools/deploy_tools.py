@@ -125,6 +125,7 @@ EXPOSE {expose}
         port: int = 8000,
         with_db: bool = False,
         db_type: str = "postgres",
+        health_check: bool = True,
         output_path: str = "docker-compose.yml",
     ) -> str:
         """
@@ -170,7 +171,7 @@ services:
       - ./:/app
 '''
 
-        if config.health_check:
+        if health_check:
             compose += f'''
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:{port}/health"]

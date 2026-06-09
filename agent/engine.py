@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
-from .planner import ExecutionPlan, TaskPlanner, TaskStatus
+from .planner import ExecutionPlan, SubTask, TaskPlanner, TaskStatus
 from .executor import Action, ExecutionResult, ExecutionStatus, ToolExecutor
 from .reflector import ErrorCategory, Reflection, ResultReflector
 from utils.model_provider import ModelManager
