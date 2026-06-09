@@ -1,0 +1,31 @@
+agent:
+  - changed-files:
+      - any-glob-to-any-file: agent/**
+
+utils:
+  - changed-files:
+      - any-glob-to-any-file: utils/**
+
+cli:
+  - changed-files:
+      - any-glob-to-any-file: cli/**
+
+tests:
+  - changed-files:
+      - any-glob-to-any-file: tests/**
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file: .github/**
+
+docs:
+  - changed-files:
+      - any-glob-to-any-file:
+          - '*.md'
+          - docs/**
+
+dependencies:
+  - changed-files:
+      - any-glob-to-any-file:
+          - requirements.txt
+          - pyproject.toml
