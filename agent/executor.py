@@ -348,7 +348,10 @@ class ToolExecutor:
 
             content = Path(target).read_text(encoding="utf-8")
             if action.old_text not in content:
-                return "Error: old_text not found in file"
+                # Include file snippet to help model understand the actual content
+                lines = content.splitlines()
+                snippet = "\n".join(f"{i+1}: {l}" for i, l in enumerate(lines[:20]))
+                return f"Error: old_text not found in file. File content (first 20 lines):\n{snippet}"
 
             new_content = content.replace(action.old_text, action.content or "", 1)
             Path(target).write_text(new_content, encoding="utf-8")
