@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""直接测试 LLM 模型修复代码的能力"""
+"""Direct LLM model testing for code fixing capabilities"""
 
 import os
 import sys
@@ -9,11 +9,13 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-for line in Path('.env').read_text().splitlines():
-    line = line.strip()
-    if line and '=' in line and not line.startswith('#'):
-        k, v = line.split('=', 1)
-        os.environ[k.strip()] = v.strip()
+env_path = Path('.env')
+if env_path.exists():
+    for line in env_path.read_text().splitlines():
+        line = line.strip()
+        if line and '=' in line and not line.startswith('#'):
+            k, v = line.split('=', 1)
+            os.environ[k.strip()] = v.strip()
 
 import ollama
 

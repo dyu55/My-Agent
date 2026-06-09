@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
-"""Phase 3: 小模型适配测试"""
+"""Phase 3: Small model adaptation tests"""
 
 import os
 import sys
 from pathlib import Path
 
-# 加载环境变量
+# Load environment variables (optional - CI may not have .env)
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-for line in Path('.env').read_text().splitlines():
-    line = line.strip()
-    if line and '=' in line and not line.startswith('#'):
-        k, v = line.split('=', 1)
-        os.environ[k.strip()] = v.strip()
+env_path = Path('.env')
+if env_path.exists():
+    for line in env_path.read_text().splitlines():
+        line = line.strip()
+        if line and '=' in line and not line.startswith('#'):
+            k, v = line.split('=', 1)
+            os.environ[k.strip()] = v.strip()
 
 import ollama
 from utils.small_model import (

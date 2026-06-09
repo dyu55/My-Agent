@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""测试 Skills 在不同模型上的表现"""
+"""Skills performance testing across different models"""
 
 import os
 import sys
@@ -9,12 +9,14 @@ from pathlib import Path
 # Add project root to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-# Load env
-for line in Path('.env').read_text().splitlines():
-    line = line.strip()
-    if line and '=' in line and not line.startswith('#'):
-        k, v = line.split('=', 1)
-        os.environ[k.strip()] = v.strip()
+# Load env (optional - CI may not have .env)
+env_path = Path('.env')
+if env_path.exists():
+    for line in env_path.read_text().splitlines():
+        line = line.strip()
+        if line and '=' in line and not line.startswith('#'):
+            k, v = line.split('=', 1)
+            os.environ[k.strip()] = v.strip()
 
 from agent.engine import AgentConfig, AgentEngine
 
