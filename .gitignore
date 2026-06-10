@@ -28,6 +28,9 @@ memory/session_logs/*.json
 memory/memories.json
 memory/chroma_db/
 memory/patterns/
+memory/current_session.json
+memory/progress.json
+memory/sessions/
 
 # IDE
 .DS_Store
@@ -55,6 +58,8 @@ benchmark_*.json
 benchmark_*.log
 agent_eval_*.log
 agent_eval_results.json
+test_progress_*.json
+test_workspace/
 
 # Root-level test/benchmark scripts (not part of core)
 test_fullstack.py

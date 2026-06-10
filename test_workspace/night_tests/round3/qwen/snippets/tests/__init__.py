@@ -1,1 +1,0 @@
-# Marker file to treat directory as a package for older test runners.
