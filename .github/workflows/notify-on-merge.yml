@@ -1,0 +1,28 @@
+name: Notify on Merge
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.merged == true
+    permissions:
+      issues: write
+    steps:
+      - name: Create merge summary
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const pr = context.payload.pull_request;
+            const body = `## PR Merged\n\n**PR:** #${pr.number}\n**Title:** ${pr.title}\n**Author:** ${pr.user.login}\n**Branch:** ${pr.head.ref} → ${pr.base.ref}\n**Files changed:** ${pr.changed_files}\n**Additions:** +${pr.additions}\n**Deletions:** -${pr.deletions}\n\n[Merged PR](${pr.html_url})`;
+
+            // Create a summary issue
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Merged: ${pr.title}`,
+              body: body,
+              labels: ['merged'],
+            });
