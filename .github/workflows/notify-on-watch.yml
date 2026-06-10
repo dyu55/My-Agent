@@ -1,0 +1,17 @@
+name: Notify on Watch
+
+on:
+  watch:
+    types: [started]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Log watch event
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const user = context.payload.sender;
+            console.log(`Repository watched by ${user.login}`);
+            console.log(`Profile: ${user.html_url}`);
