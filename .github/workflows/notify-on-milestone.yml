@@ -1,0 +1,22 @@
+name: Notify on Milestone
+
+on:
+  milestone:
+    types: [opened, closed]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Log milestone event
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const milestone = context.payload.milestone;
+            const action = context.payload.action;
+
+            console.log(`Milestone ${action}: ${milestone.title}`);
+            console.log(`Description: ${milestone.description || 'No description'}`);
+            console.log(`Due: ${milestone.due_on || 'No due date'}`);
