@@ -20,6 +20,7 @@ from .tools.exec_tools import ExecTools, get_exec_tool_handlers
 from .tools.search_tools import SearchTools, get_search_tool_handlers
 from .tools.git_tools import GitTools, get_git_tool_handlers
 from .tools.base import ToolResult
+from .tool_policy import ToolPolicy
 
 logger = logging.getLogger(__name__)
 
@@ -87,9 +88,14 @@ class ToolExecutor:
     Uses modular tool implementations from agent/tools/ package.
     """
 
-    def __init__(self, workspace_path: str):
+    def __init__(
+        self,
+        workspace_path: str,
+        tool_policy: dict[str, Any] | ToolPolicy | None = None,
+    ):
         self.workspace = workspace_path
         self.action_history: list[ExecutionResult] = []
+        self.tool_policy = ToolPolicy.from_config(tool_policy)
 
         # Initialize modular tools
         self._file_tools = FileTools(workspace_path)
@@ -294,6 +300,10 @@ class ToolExecutor:
         handler = handlers.get(action.command)
         if not handler:
             return f"Error: Unknown command '{action.command}'"
+
+        policy_decision = self.tool_policy.evaluate(action.command, self._action_dict)
+        if not policy_decision.allows_execution:
+            return f"Error: {policy_decision.reason}"
 
         result = handler()
         return result.output

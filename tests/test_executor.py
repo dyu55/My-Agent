@@ -199,6 +199,69 @@ class TestToolExecutor:
         assert result.is_success() is False
         assert "Unknown command" in result.output
 
+    def test_tool_policy_blocks_command(self, workspace):
+        """Test that a configured policy can block a tool command."""
+        executor = ToolExecutor(
+            workspace,
+            tool_policy={"blocked_commands": ["execute"]},
+        )
+
+        result = executor.execute_action(
+            Action(command="execute", script="echo 'blocked secret'")
+        )
+
+        assert result.is_success() is False
+        assert "blocked by tool policy" in result.output
+        assert "blocked secret" not in result.output
+        assert executor.tool_policy.audit_log[-1]["action"]["script"] == "[redacted]"
+
+    def test_tool_policy_observe_mode_records_without_blocking(self, workspace):
+        """Test observe mode audits policy decisions without enforcing them."""
+        executor = ToolExecutor(
+            workspace,
+            tool_policy={"blocked_commands": ["execute"], "observe": True},
+        )
+
+        result = executor.execute_action(
+            Action(command="execute", script="echo 'allowed in observe'")
+        )
+
+        assert result.is_success()
+        assert "allowed in observe" in result.output
+        audit = executor.tool_policy.audit_log[-1]
+        assert audit["status"] == "blocked"
+        assert audit["observed"] is True
+
+    def test_tool_policy_allowlist_blocks_unspecified_command(self, workspace):
+        """Test allowlist mode rejects commands not explicitly listed."""
+        executor = ToolExecutor(
+            workspace,
+            tool_policy={"allowed_commands": ["read"]},
+        )
+
+        result = executor.execute_action(
+            Action(command="write", path="blocked.txt", content="nope")
+        )
+
+        assert result.is_success() is False
+        assert "allowlist" in result.output
+        assert not Path(workspace, "blocked.txt").exists()
+
+    def test_tool_policy_requires_approval(self, workspace):
+        """Test approval-required commands fail closed without approval plumbing."""
+        executor = ToolExecutor(
+            workspace,
+            tool_policy={"approval_required_commands": ["write"]},
+        )
+
+        result = executor.execute_action(
+            Action(command="write", path="approval.txt", content="wait")
+        )
+
+        assert result.is_success() is False
+        assert "requires approval" in result.output
+        assert not Path(workspace, "approval.txt").exists()
+
     def test_path_security_check(self, executor, workspace):
         """Test that paths cannot escape workspace."""
         result = executor.execute_action(
