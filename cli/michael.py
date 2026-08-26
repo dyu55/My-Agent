@@ -290,8 +290,11 @@ class MichaelCLI:
             # Try with reasonable timeout for remote model
             response = model_manager.chat(
                 prompt + f"\n\n用户: {user_input}",
-                timeout=45  # 45 second timeout for remote model
+                timeout=45
             )
+            reasoning = model_manager.get_last_reasoning()
+            if reasoning:
+                print(f"🧠 [Thinking Trace]:\n{reasoning.strip()}\n")
             print(response)
         except (
             requests.exceptions.Timeout,

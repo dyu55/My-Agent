@@ -209,6 +209,17 @@ class ToolExecutor:
             result = self._dispatch_action(action)
             execution_time = time.time() - start_time
 
+            # Post-edit fast static syntax diagnostic for Python files
+            if not result.startswith("Error") and action.command in ("write", "edit") and action.path and action.path.endswith(".py"):
+                try:
+                    target_file = Path(self.workspace) / action.path
+                    if target_file.exists():
+                        import ast
+                        ast.parse(target_file.read_text(encoding="utf-8"), filename=str(target_file))
+                except SyntaxError as syn_err:
+                    diag = f"\n[Static Diagnostic Warning]: SyntaxError in {action.path} (line {syn_err.lineno}): {syn_err.msg}"
+                    result = result + diag
+
             return ExecutionResult(
                 status=ExecutionStatus.SUCCESS if not result.startswith("Error")
                 else ExecutionStatus.FAILURE,

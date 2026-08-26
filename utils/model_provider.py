@@ -13,7 +13,10 @@ from collections.abc import Generator
 from dataclasses import dataclass
 from typing import Any
 
-import ollama
+try:
+    import ollama
+except ImportError:
+    ollama = None
 
 
 @dataclass
@@ -28,6 +31,9 @@ class ModelInfo:
 
 class BaseModelProvider(ABC):
     """Base class for model providers."""
+
+    def __init__(self):
+        self.last_reasoning: str | None = None
 
     @abstractmethod
     def chat(self, prompt: str, **kwargs) -> str:
@@ -67,13 +73,15 @@ class OllamaProvider(BaseModelProvider):
         timeout: int = 600,  # 10 minutes default for slow remote servers
         api_key: str | None = None,  # For Ollama Cloud authentication
     ):
+        super().__init__()
         self.model = model
         self.base_url = base_url
         self.timeout = timeout
         self.api_key = api_key or os.getenv("OLLAMA_API_KEY")
 
-        # Create client with auth headers if API key provided (for Ollama Cloud)
-        if self.api_key:
+        if ollama is None:
+            self.client = None
+        elif self.api_key:
             self.client = ollama.Client(
                 host=base_url,
                 timeout=timeout,
@@ -162,39 +170,55 @@ class OllamaProvider(BaseModelProvider):
 
 
 class OpenAIProvider(BaseModelProvider):
-    """OpenAI API provider."""
+    """OpenAI API provider with 2026 flagship model support."""
 
     def __init__(
         self,
-        model: str = "gpt-4o-mini",
+        model: str = "gpt-5.6-sol",
         api_key: str | None = None,
         base_url: str = "https://api.openai.com/v1",
     ):
+        super().__init__()
         self.model = model
         self.api_key = api_key or os.getenv("OPENAI_API_KEY", "")
         self.base_url = base_url
 
-        from openai import OpenAI
-        self.client = OpenAI(base_url=base_url, api_key=self.api_key)
+        try:
+            from openai import OpenAI
+            self.client = OpenAI(base_url=base_url, api_key=self.api_key)
+        except Exception:
+            self.client = None
 
     def chat(self, prompt: str, **kwargs) -> str:
         """Send a chat request to OpenAI."""
+        if not self.client:
+            raise RuntimeError("OpenAI client not initialized. Install openai package.")
         messages = [{"role": "user", "content": prompt}]
 
         kwargs.setdefault("model", self.model)
         kwargs.setdefault("messages", messages)
         kwargs.setdefault("response_format", {"type": "json_object"})
 
+        # Handle reasoning effort if passed
+        reasoning_effort = kwargs.pop("reasoning_effort", None)
+        if reasoning_effort and any(k in kwargs.get("model", "") for k in ("o3", "o1", "gpt-5")):
+            kwargs["reasoning_effort"] = reasoning_effort
+
         response = self.client.chat.completions.create(**kwargs)
-        return response.choices[0].message.content or "{}"
+        choice = response.choices[0]
+        if hasattr(choice.message, "reasoning_content") and choice.message.reasoning_content:
+            self.last_reasoning = choice.message.reasoning_content
+        return choice.message.content or "{}"
 
     def chat_stream(self, prompt: str, **kwargs) -> Generator[str, None, None]:
         """Stream chat response from OpenAI."""
+        if not self.client:
+            raise RuntimeError("OpenAI client not initialized. Install openai package.")
         messages = [{"role": "user", "content": prompt}]
 
         kwargs.setdefault("model", self.model)
         kwargs.setdefault("messages", messages)
-        kwargs.pop("response_format", None)  # streaming doesn't support json_object
+        kwargs.pop("response_format", None)
 
         stream = self.client.chat.completions.create(stream=True, **kwargs)
         for chunk in stream:
@@ -203,44 +227,73 @@ class OpenAIProvider(BaseModelProvider):
                 yield delta.content
 
     def list_models(self) -> list[ModelInfo]:
-        """List available OpenAI models (returns common models)."""
+        """List available OpenAI models."""
         return [
-            ModelInfo(name="gpt-4o", provider="openai", description="Most capable model"),
-            ModelInfo(name="gpt-4o-mini", provider="openai", description="Fast, cheap"),
-            ModelInfo(name="gpt-4-turbo", provider="openai", description="Fast GPT-4"),
-            ModelInfo(name="o1-preview", provider="openai", description="Reasoning model"),
-            ModelInfo(name="o1-mini", provider="openai", description="Fast reasoning"),
+            ModelInfo(name="gpt-5.6-sol", provider="openai", description="2026 Flagship for terminal agent & deterministic coding"),
+            ModelInfo(name="gpt-5.5", provider="openai", description="High capability reasoning & coding"),
+            ModelInfo(name="o3-mini", provider="openai", description="Fast reasoning & coding model"),
+            ModelInfo(name="o1", provider="openai", description="Flagship reasoning model"),
+            ModelInfo(name="gpt-4o", provider="openai", description="Multimodal general model"),
+            ModelInfo(name="gpt-4o-mini", provider="openai", description="Fast, low cost"),
         ]
 
 
 class AnthropicProvider(BaseModelProvider):
-    """Anthropic API provider."""
+    """Anthropic API provider with 2026 Claude flagship support."""
 
     def __init__(
         self,
-        model: str = "claude-sonnet-4-20250514",
+        model: str = "claude-opus-5-latest",
         api_key: str | None = None,
     ):
+        super().__init__()
         self.model = model
         self.api_key = api_key or os.getenv("ANTHROPIC_API_KEY", "")
 
-        import anthropic
-        self.client = anthropic.Anthropic(api_key=self.api_key)
+        try:
+            import anthropic
+            self.client = anthropic.Anthropic(api_key=self.api_key)
+        except Exception:
+            self.client = None
 
     def chat(self, prompt: str, **kwargs) -> str:
-        """Send a chat request to Anthropic."""
+        """Send a chat request to Anthropic with optional thinking mode."""
+        if not self.client:
+            raise RuntimeError("Anthropic client not initialized. Install anthropic package.")
         kwargs.setdefault("model", self.model)
-        kwargs.setdefault("messages", [{"role": "user", "content": prompt}])
-        kwargs.setdefault("max_tokens", 1024)
+        if "messages" not in kwargs:
+            kwargs["messages"] = [{"role": "user", "content": prompt}]
+        kwargs.setdefault("max_tokens", 4096)
+
+        # Support thinking budget for Claude 3.7+ / Opus 5 / Fable 5
+        think_budget = kwargs.pop("thinking_budget", None) or kwargs.pop("think_budget", None)
+        if think_budget and think_budget > 0:
+            kwargs["thinking"] = {"type": "enabled", "budget_tokens": think_budget}
+            if kwargs["max_tokens"] <= think_budget:
+                kwargs["max_tokens"] = think_budget + 4096
 
         response = self.client.messages.create(**kwargs)
-        return response.content[0].text
+        
+        # Extract thinking and text blocks
+        full_text = []
+        thinking_text = []
+        for block in response.content:
+            if getattr(block, "type", None) == "thinking" or hasattr(block, "thinking"):
+                thinking_text.append(getattr(block, "thinking", ""))
+            elif getattr(block, "type", None) == "text" or hasattr(block, "text"):
+                full_text.append(getattr(block, "text", ""))
+
+        if thinking_text:
+            self.last_reasoning = "\n".join(thinking_text)
+        return "\n".join(full_text) if full_text else (response.content[0].text if response.content else "")
 
     def chat_stream(self, prompt: str, **kwargs) -> Generator[str, None, None]:
         """Stream chat response from Anthropic."""
+        if not self.client:
+            raise RuntimeError("Anthropic client not initialized. Install anthropic package.")
         kwargs.setdefault("model", self.model)
         kwargs.setdefault("messages", [{"role": "user", "content": prompt}])
-        kwargs.setdefault("max_tokens", 1024)
+        kwargs.setdefault("max_tokens", 4096)
 
         with self.client.messages.stream(**kwargs) as stream:
             for text in stream.text_stream:
@@ -249,40 +302,53 @@ class AnthropicProvider(BaseModelProvider):
     def list_models(self) -> list[ModelInfo]:
         """List available Anthropic models."""
         return [
-            ModelInfo(name="claude-opus-4-20250514", provider="anthropic", description="Most capable"),
-            ModelInfo(name="claude-sonnet-4-20250514", provider="anthropic", description="Balanced"),
-            ModelInfo(name="claude-haiku-4-20250514", provider="anthropic", description="Fast, cheap"),
+            ModelInfo(name="claude-opus-5-latest", provider="anthropic", description="2026 Flagship for deep refactoring & repository reasoning"),
+            ModelInfo(name="claude-fable-5", provider="anthropic", description="2026 Agentic loops & complex reasoning"),
+            ModelInfo(name="claude-3-7-sonnet-latest", provider="anthropic", description="Hybrid reasoning & extended thinking coding model"),
+            ModelInfo(name="claude-3-5-sonnet-20241022", provider="anthropic", description="Balanced coding model"),
+            ModelInfo(name="claude-3-5-haiku-20241022", provider="anthropic", description="Fast, cheap agent subtasks"),
         ]
 
 
 class DeepSeekProvider(BaseModelProvider):
-    """DeepSeek API provider."""
+    """DeepSeek API provider with 2026 V4 and Reasoner support."""
 
     def __init__(
         self,
-        model: str = "deepseek-chat",
+        model: str = "deepseek-v4-pro",
         api_key: str | None = None,
         base_url: str = "https://api.deepseek.com",
     ):
+        super().__init__()
         self.model = model
         self.api_key = api_key or os.getenv("DEEPSEEK_API_KEY", "")
         self.base_url = base_url
 
-        from openai import OpenAI
-        self.client = OpenAI(base_url=base_url, api_key=self.api_key)
+        try:
+            from openai import OpenAI
+            self.client = OpenAI(base_url=base_url, api_key=self.api_key)
+        except Exception:
+            self.client = None
 
     def chat(self, prompt: str, **kwargs) -> str:
-        """Send a chat request to DeepSeek."""
-        messages = [{"role": "user", "content": prompt}]
+        """Send a chat request to DeepSeek, extracting reasoning content."""
+        if not self.client:
+            raise RuntimeError("DeepSeek client not initialized. Install openai package.")
+        if "messages" not in kwargs:
+            kwargs["messages"] = [{"role": "user", "content": prompt}]
 
         kwargs.setdefault("model", self.model)
-        kwargs.setdefault("messages", messages)
 
         response = self.client.chat.completions.create(**kwargs)
-        return response.choices[0].message.content or ""
+        choice = response.choices[0]
+        if hasattr(choice.message, "reasoning_content") and choice.message.reasoning_content:
+            self.last_reasoning = choice.message.reasoning_content
+        return choice.message.content or ""
 
     def chat_stream(self, prompt: str, **kwargs) -> Generator[str, None, None]:
         """Stream chat response from DeepSeek."""
+        if not self.client:
+            raise RuntimeError("DeepSeek client not initialized. Install openai package.")
         messages = [{"role": "user", "content": prompt}]
 
         kwargs.setdefault("model", self.model)
@@ -297,35 +363,35 @@ class DeepSeekProvider(BaseModelProvider):
     def list_models(self) -> list[ModelInfo]:
         """List available DeepSeek models."""
         return [
+            ModelInfo(name="deepseek-v4-pro", provider="deepseek", description="2026 Flagship price-to-performance frontier coding model"),
+            ModelInfo(name="deepseek-v4-flash", provider="deepseek", description="Ultra-fast, cost-effective agent model"),
+            ModelInfo(name="deepseek-reasoner", provider="deepseek", description="DeepSeek reasoning model (R1/V4)"),
             ModelInfo(name="deepseek-chat", provider="deepseek", description="General chat model"),
-            ModelInfo(name="deepseek-coder", provider="deepseek", description="Code generation model"),
-            ModelInfo(name="deepseek-reasoner", provider="deepseek", description="Reasoning model"),
-            ModelInfo(name="deepseek-v4-pro", provider="deepseek", description="Latest Pro model"),
         ]
 
 
 class GeminiProvider(BaseModelProvider):
-    """Google AI Gemini API provider."""
+    """Google AI Gemini API provider with 2026 Gemini 3.1 & Gemma 4 support."""
 
     def __init__(
         self,
-        model: str = "gemini-2.5-pro-preview-06-05",
+        model: str = "gemini-3.1-pro",
         api_key: str | None = None,
     ):
+        super().__init__()
         self.model = model
         self.api_key = api_key or os.getenv("GEMINI_API_KEY", "")
         self.base_url = "https://generativelanguage.googleapis.com"
 
         try:
             import google.genai as genai
-        except ImportError:
+            self.client = genai.Client(api_key=self.api_key)
+        except Exception:
             try:
                 from google import genai
-            except ImportError:
-                raise ImportError(
-                    "google-genai not installed. Install with: pip install google-genai"
-                )
-        self.client = genai.Client(api_key=self.api_key)
+                self.client = genai.Client(api_key=self.api_key)
+            except Exception:
+                self.client = None
 
     def chat(self, prompt: str, **kwargs) -> str:
         """Send a chat request to Gemini."""
@@ -334,7 +400,6 @@ class GeminiProvider(BaseModelProvider):
         # Handle messages format - convert to Gemini content
         if "messages" in kwargs:
             messages = kwargs.pop("messages")
-            # Convert messages to a single content string
             content_parts = []
             for msg in messages:
                 role = msg.get("role", "user")
@@ -358,6 +423,11 @@ class GeminiProvider(BaseModelProvider):
             
         if "max_tokens" in kwargs:
             config_args["max_output_tokens"] = kwargs.pop("max_tokens")
+
+        # Thinking config support
+        thinking_budget = kwargs.pop("thinking_budget", None) or kwargs.pop("think_budget", None)
+        if thinking_budget is not None:
+            config_args["thinking_config"] = {"thinking_budget": thinking_budget}
 
         config = types.GenerateContentConfig(**config_args) if config_args else None
 
@@ -383,13 +453,12 @@ class GeminiProvider(BaseModelProvider):
     def list_models(self) -> list[ModelInfo]:
         """List available Gemini models."""
         return [
-            ModelInfo(name="gemma-4-31b-it", provider="gemini", description="31B instruction tuned"),
-            ModelInfo(name="gemma-4-26b-a4b-it", provider="gemini", description="26B a4b instruction tuned"),
-            ModelInfo(name="gemini-3-pro-preview", provider="gemini", description="Gemini 3 Pro preview"),
-            ModelInfo(name="gemini-3-flash-preview", provider="gemini", description="Gemini 3 Flash preview"),
-            ModelInfo(name="gemini-2.5-pro", provider="gemini", description="Gemini 2.5 Pro"),
-            ModelInfo(name="gemini-2.5-flash", provider="gemini", description="Gemini 2.5 Flash"),
-            ModelInfo(name="gemini-2.0-flash", provider="gemini", description="Gemini 2.0 Flash"),
+            ModelInfo(name="gemini-3.1-pro", provider="gemini", description="2026 Flagship 1M context, 65k output & 3-tier thinking model"),
+            ModelInfo(name="gemini-3.7-flash", provider="gemini", description="High-speed reasoning & multimodal model"),
+            ModelInfo(name="gemini-2.5-pro", provider="gemini", description="Large context reasoning model"),
+            ModelInfo(name="gemini-2.5-flash", provider="gemini", description="Fast multimodal model"),
+            ModelInfo(name="gemma-4-31b-it", provider="gemini", description="Google Gemma 4 31B instruction tuned"),
+            ModelInfo(name="gemma-4-26b-a4b-it", provider="gemini", description="Google Gemma 4 26B a4b MoE instruction tuned"),
         ]
 
 
@@ -452,8 +521,11 @@ class ModelManager:
         base_url: str | None = None,
     ):
         # 加载 .env 文件
-        from dotenv import load_dotenv
-        load_dotenv()
+        try:
+            from dotenv import load_dotenv
+            load_dotenv()
+        except ImportError:
+            pass
 
         # 从环境变量读取默认值
         self.current_provider = default_provider or os.getenv("ACTIVE_PROVIDER", "ollama")
@@ -497,14 +569,14 @@ class ModelManager:
                 ),
                 "api_key": ollama_api_key,
             },
-            "openai": {"model": os.getenv("OPENAI_MODEL", "gpt-4o-mini")},
-            "anthropic": {"model": os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-20250514")},
+            "openai": {"model": os.getenv("OPENAI_MODEL", "gpt-5.6-sol")},
+            "anthropic": {"model": os.getenv("ANTHROPIC_MODEL", "claude-opus-5-latest")},
             "deepseek": {
-                "model": os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
+                "model": os.getenv("DEEPSEEK_MODEL", "deepseek-v4-pro"),
                 "api_key": os.getenv("DEEPSEEK_API_KEY", ""),
             },
             "gemini": {
-                "model": os.getenv("GEMINI_MODEL", "gemma-4-31b-it"),
+                "model": os.getenv("GEMINI_MODEL", "gemini-3.1-pro"),
                 "api_key": os.getenv("GEMINI_API_KEY", ""),
             },
             "mimo": {
@@ -517,12 +589,18 @@ class ModelManager:
         kwargs = provider_config.get(self.current_provider, {})
         self._provider = ModelProviderFactory.create(self.current_provider, **kwargs)
 
+    def get_last_reasoning(self) -> str | None:
+        """Get the reasoning trace from the last chat request if available."""
+        if self._provider:
+            return getattr(self._provider, "last_reasoning", None)
+        return None
+
     def set_model(self, provider: str, model: str | None = None) -> bool:
         """
         Switch to a different model.
 
         Args:
-            provider: Provider name (ollama, openai, anthropic)
+            provider: Provider name (ollama, openai, anthropic, deepseek, gemini)
             model: Model name (optional, uses default if not specified)
 
         Returns:
@@ -534,16 +612,16 @@ class ModelManager:
             if model:
                 self.current_model = model
             else:
-                # Use default model for provider
+                # Use 2026 default model for provider
                 defaults = {
-                    "ollama": "gemma4:latest",
-                    "openai": "gpt-4o-mini",
-                    "anthropic": "claude-sonnet-4-20250514",
-                    "deepseek": "deepseek-chat",
-                    "gemini": "gemma-4-31b-it",
+                    "ollama": "gemma-4-31b-it",
+                    "openai": "gpt-5.6-sol",
+                    "anthropic": "claude-opus-5-latest",
+                    "deepseek": "deepseek-v4-pro",
+                    "gemini": "gemini-3.1-pro",
                     "mimo": "mimo-v2.5-pro",
                 }
-                self.current_model = defaults.get(self.current_provider, "gemma4:latest")
+                self.current_model = defaults.get(self.current_provider, "gemma-4-31b-it")
 
             self._init_provider()
             return True

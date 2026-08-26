@@ -63,15 +63,23 @@ Parameterized skills with chaining, prerequisites, and template rendering:
 - Prerequisite validation
 - Template rendering with context variables
 
-### Multi-Model Support
+### Multi-Model Support (2026 Lineup)
 
-Factory pattern unified access:
+Factory pattern unified access with native thinking stream extraction:
 
-- **Ollama** (default) - Local 8B/9B models (gemma4, qwen3.5)
-- **OpenAI** - API-based models
-- **Anthropic** - Claude API
-- **Ollama Cloud** - Cloud-hosted models with API key
-- **Custom endpoints** - OpenAI-compatible APIs
+- **Ollama** (default) - Local models (`gemma-4-31b-it`, `gemma-4-26b-a4b-it`, `qwen3.6-27b`)
+- **Anthropic** - Claude API (`claude-opus-5-latest`, `claude-fable-5`, `claude-3-7-sonnet-latest`, `claude-3-5-haiku-20241022`)
+- **OpenAI** - OpenAI API (`gpt-5.6-sol`, `gpt-5.5`, `o3-mini`, `o1`, `gpt-4o`)
+- **Google Gemini** - Gemini API (`gemini-3.1-pro`, `gemini-3.7-flash`, `gemma-4-31b-it`)
+- **DeepSeek** - DeepSeek API (`deepseek-v4-pro`, `deepseek-v4-flash`, `deepseek-reasoner`)
+- **Ollama Cloud / Custom endpoints** - OpenAI-compatible APIs
+
+### 2026 Coding Agent Enhancements
+
+- 🗺️ **AST Repo Map** - Extracts Class/Function/Method signatures to provide project-wide architectural context within ~2k tokens.
+- ✏️ **Fuzzy Search-and-Replace** - Multi-level fuzzy matching for code edits (whitespace-insensitive, difflib similarity) preventing unnecessary full file rewrites.
+- ⚡ **Post-Edit Fast Static Diagnostics** - Sub-millisecond `ast.parse` syntax verification immediately after code edits for instant self-correction.
+- 🧠 **Reasoning / Thinking Stream Decoupling** - Cleanly isolates `<think>` traces from Action JSON payloads.
 
 ## Quick Start
 
@@ -88,7 +96,7 @@ python main.py --chat
 python main.py "Create a TODO app"
 
 # Specify model/provider
-python main.py --provider ollama --model gemma4:latest
+python main.py --provider ollama --model gemma-4-31b-it
 ```
 
 ## Project Structure
@@ -105,7 +113,8 @@ myAgent/
 │   │   ├── skill_engine.py  # Parameterized skill execution
 │   │   └── skill_templates.py # Skill scaffolding
 │   └── tools/               # Modular tools
-│       ├── file_tools.py
+│       ├── file_tools.py    # File tools with Fuzzy Search-and-Replace
+│       ├── repo_map.py      # AST-based project symbol map
 │       ├── exec_tools.py
 │       ├── search_tools.py
 │       ├── git_tools.py

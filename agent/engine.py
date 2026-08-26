@@ -14,6 +14,7 @@ from typing import Any, Callable
 from .planner import ExecutionPlan, SubTask, TaskPlanner, TaskStatus
 from .executor import Action, ExecutionResult, ExecutionStatus, ToolExecutor
 from .reflector import ErrorCategory, Reflection, ResultReflector
+from .tools.repo_map import RepoMap
 from utils.model_provider import ModelManager
 from utils.conversation import ConversationMemory
 from utils.persistent_memory import PersistentMemory, SessionMemory
@@ -459,7 +460,7 @@ Model: {model_info}
         return plan
 
     def _get_project_context(self) -> str:
-        """Get current project context for planning, limited by model profile."""
+        """Get current project context for planning, leveraging AST RepoMap."""
         import time as _time
         now = _time.time()
         if (
@@ -469,13 +470,9 @@ Model: {model_info}
             return self._project_context_cache
 
         try:
-            max_files = self.model_profile.max_file_context_files
-            files = list(self.config.workspace.rglob("*"))
-            file_list = "\n".join(
-                f"{'[DIR]' if f.is_dir() else '[FILE]'} {f.relative_to(self.config.workspace)}"
-                for f in files[:max_files]
-            )
-            result = f"Project files:\n{file_list}" if file_list else "Empty project"
+            repo_map = RepoMap(self.config.workspace, max_chars=min(4000, self.model_profile.max_prompt_chars))
+            symbol_map = repo_map.generate_map()
+            result = f"## Project Architecture & AST Symbols\n{symbol_map}"
         except Exception:
             result = "Unable to get project context"
 

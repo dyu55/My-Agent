@@ -1,5 +1,4 @@
-"""File operation tools."""
-
+import difflib
 import json
 from pathlib import Path
 from typing import Any
@@ -16,6 +15,62 @@ class FileTools:
         self.rollback_enabled = enable_rollback
         self._rollback_manager = RollbackManager() if enable_rollback else None
         self._pending_edits: dict[str, str] = {}  # Track pending edits for potential rollback
+
+    @staticmethod
+    def _fuzzy_replace(file_content: str, old_text: str, new_text: str) -> str | None:
+        """
+        Replace old_text with new_text using multi-level matching:
+        1. Exact match
+        2. Normalized line endings (\r\n vs \n)
+        3. Whitespace-insensitive stripped line matching
+        4. Sliding-window difflib fuzzy sequence matching (similarity >= 0.85)
+        """
+        # 1. Exact match
+        if old_text in file_content:
+            return file_content.replace(old_text, new_text, 1)
+
+        # 2. Line ending normalization
+        norm_file = file_content.replace("\r\n", "\n")
+        norm_old = old_text.replace("\r\n", "\n")
+        norm_new = new_text.replace("\r\n", "\n")
+        if norm_old in norm_file:
+            return norm_file.replace(norm_old, norm_new, 1)
+
+        # 3. Whitespace-stripped line matching
+        file_lines = norm_file.split("\n")
+        old_lines = norm_old.split("\n")
+        old_stripped = [line.strip() for line in old_lines if line.strip()]
+
+        if old_stripped:
+            for i in range(len(file_lines) - len(old_lines) + 1):
+                candidate_slice = file_lines[i : i + len(old_lines)]
+                cand_stripped = [l.strip() for l in candidate_slice if l.strip()]
+                if cand_stripped == old_stripped:
+                    new_lines = norm_new.split("\n")
+                    result_lines = file_lines[:i] + new_lines + file_lines[i + len(old_lines):]
+                    return "\n".join(result_lines)
+
+        # 4. Fuzzy sliding window sequence matcher
+        if len(old_lines) > 1 or len(norm_old) > 20:
+            window_size = max(1, len(old_lines))
+            best_ratio = 0.0
+            best_idx = -1
+            old_str_strip = "\n".join(old_stripped)
+
+            for i in range(len(file_lines) - window_size + 1):
+                candidate_lines = file_lines[i : i + window_size]
+                cand_str_strip = "\n".join(l.strip() for l in candidate_lines if l.strip())
+                ratio = difflib.SequenceMatcher(None, cand_str_strip, old_str_strip).ratio()
+                if ratio > best_ratio and ratio >= 0.85:
+                    best_ratio = ratio
+                    best_idx = i
+
+            if best_idx != -1 and best_ratio >= 0.85:
+                new_lines = norm_new.split("\n")
+                result_lines = file_lines[:best_idx] + new_lines + file_lines[best_idx + window_size:]
+                return "\n".join(result_lines)
+
+        return None
 
     def _resolve_path(self, path: str | None) -> str:
         """Resolve a path to be within the workspace."""
@@ -77,7 +132,7 @@ class FileTools:
             return ToolResult.err(f"Error writing file: {str(e)}", f"Error writing file: {str(e)}")
 
     def edit_file(self, action: dict[str, Any]) -> ToolResult:
-        """Edit a file by replacing old_text with new_text."""
+        """Edit a file by replacing old_text with new_text (supporting fuzzy matching)."""
         path = action.get("path")
         old_text = action.get("old_text")
         content = action.get("content", "")
@@ -91,10 +146,12 @@ class FileTools:
                 return ToolResult.err(target, f"Error: {target}")
 
             file_content = Path(target).read_text(encoding="utf-8")
-            if old_text not in file_content:
+            new_content = self._fuzzy_replace(file_content, old_text, content)
+            
+            if new_content is None:
                 return ToolResult.err(
-                    "old_text not found in file",
-                    "Error: old_text not found in file"
+                    "old_text not found in file (fuzzy match failed)",
+                    "Error: old_text not found in file (fuzzy match failed)"
                 )
 
             # Backup before edit
@@ -102,7 +159,6 @@ class FileTools:
                 self._rollback_manager.backup(target)
                 self._pending_edits[target] = target
 
-            new_content = file_content.replace(old_text, content, 1)
             Path(target).write_text(new_content, encoding="utf-8")
 
             # Commit the backup (successful edit)
