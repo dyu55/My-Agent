@@ -38,7 +38,7 @@ class ModelProfile:
         # Extract parameter count from common patterns
         param_b = cls._extract_param_size(name_lower)
 
-        if param_b <= 14:
+        if param_b <= 10:
             return cls._small_profile(param_b)
         elif param_b <= 35:
             return cls._medium_profile(param_b)
@@ -62,54 +62,54 @@ class ModelProfile:
         known_sizes = {
             "tiny": 1, "mini": 3, "small": 7,
             "gemma-4": 31, "gemma4": 31, "gemma": 9,
-            "qwen3": 27, "qwen": 14, "phi": 3,
-            "mistral": 12, "codellama": 7, "codestral": 22,
+            "qwen3": 27, "qwen": 9, "phi": 3,
+            "mistral": 7, "codellama": 7, "codestral": 22,
             "llama3": 8, "llama-3": 8, "llama": 8,
-            "deepseek": 32, "yi": 6, "kimi": 70,
+            "deepseek": 16, "yi": 6, "kimi": 70,
         }
         for key, size in known_sizes.items():
             if key in name:
                 return size
 
         # Default to medium if unknown
-        return 27
+        return 14
 
     @staticmethod
     def _small_profile(param_b: float) -> "ModelProfile":
-        """Profile for 8B-14B models (Gemma 4 12B, Qwen2.5-Coder 14B, DeepSeek R1 8B/14B)."""
+        """Profile for 8B/9B models."""
         return ModelProfile(
             size_category="small",
             param_billions=param_b,
-            max_context_tokens=16384,
-            max_file_context_files=15,
-            max_prompt_chars=4000,
-            max_history_messages=8,
+            max_context_tokens=4096,
+            max_file_context_files=10,
+            max_prompt_chars=2000,
+            max_history_messages=5,
             prefer_short_prompts=True,
         )
 
     @staticmethod
     def _medium_profile(param_b: float) -> "ModelProfile":
-        """Profile for 26B-35B models (Gemma 4 26B/31B, Qwen 3.6 27B, Codestral 22B)."""
+        """Profile for 26B/31B models."""
         return ModelProfile(
             size_category="medium",
             param_billions=param_b,
-            max_context_tokens=32768,
-            max_file_context_files=35,
-            max_prompt_chars=8000,
-            max_history_messages=16,
+            max_context_tokens=8192,
+            max_file_context_files=25,
+            max_prompt_chars=4000,
+            max_history_messages=10,
             prefer_short_prompts=False,
         )
 
     @staticmethod
     def _large_profile(param_b: float) -> "ModelProfile":
-        """Profile for 70B+ & Frontier API models (Claude Opus 5, GPT-5.6 Sol, Gemini 3.1 Pro, DeepSeek-V4)."""
+        """Profile for 70B+ models."""
         return ModelProfile(
             size_category="large",
             param_billions=param_b,
-            max_context_tokens=131072,
-            max_file_context_files=80,
-            max_prompt_chars=24000,
-            max_history_messages=40,
+            max_context_tokens=32768,
+            max_file_context_files=50,
+            max_prompt_chars=8000,
+            max_history_messages=20,
             prefer_short_prompts=False,
         )
 

@@ -16,7 +16,7 @@ def test_2026_model_profiles():
     # Frontier models -> large profile
     p_opus = get_model_profile("claude-opus-5-latest")
     assert p_opus.size_category == "large"
-    assert p_opus.max_context_tokens >= 65536
+    assert p_opus.max_context_tokens >= 32768
 
     p_sol = get_model_profile("gpt-5.6-sol")
     assert p_sol.size_category == "large"

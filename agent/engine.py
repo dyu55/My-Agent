@@ -460,7 +460,7 @@ Model: {model_info}
         return plan
 
     def _get_project_context(self) -> str:
-        """Get current project context for planning, leveraging AST RepoMap."""
+        """Get current project context for planning, limited by model profile."""
         import time as _time
         now = _time.time()
         if (
@@ -470,9 +470,22 @@ Model: {model_info}
             return self._project_context_cache
 
         try:
-            repo_map = RepoMap(self.config.workspace, max_chars=min(4000, self.model_profile.max_prompt_chars))
-            symbol_map = repo_map.generate_map()
-            result = f"## Project Architecture & AST Symbols\n{symbol_map}"
+            max_files = self.model_profile.max_file_context_files
+            files = list(self.config.workspace.rglob("*"))
+            file_list = "\n".join(
+                f"{'[DIR]' if f.is_dir() else '[FILE]'} {f.relative_to(self.config.workspace)}"
+                for f in files[:max_files]
+            )
+            result = f"Project files:\n{file_list}" if file_list else "Empty project"
+
+            # Enrich with AST RepoMap if available
+            try:
+                repo_map = RepoMap(self.config.workspace, max_chars=min(2000, self.model_profile.max_prompt_chars))
+                symbols = repo_map.generate_map()
+                if symbols and symbols != "No Python symbols found.":
+                    result += f"\n\n## Project Architecture & AST Symbols\n{symbols}"
+            except Exception:
+                pass
         except Exception:
             result = "Unable to get project context"
 
