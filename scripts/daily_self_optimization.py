@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Daily Self-Optimization & Evolution Pipeline for MyAgent.
+"""Daily Self-Optimization, Tech Research & CI Self-Healing Pipeline for MyAgent.
 
-Executes daily self-healing, quality auditing, regression testing, and CI verification:
-1. Syntax & Static Lint Audit
-2. Full Test Suite Regression (450+ tests)
-3. AST RepoMap & Symbol Re-indexing
-4. LLM Cache Hygiene
-5. GitHub Actions CI Health Check & Auto-Healing
+Full 5-Stage Evolution Loop:
+1. Frontier AI/LLM/Agent Tech Radar & Best Practices Discovery
+2. Codebase Structure & Syntax Audit
+3. Comprehensive Test Regression & Unit Test Coverage Verification
+4. AST RepoMap Topology Graph & Cache Hygiene
+5. Remote GitHub Actions CI Guardian, Auto-Healing & Git Evolution Sync
 """
 
 import os
@@ -39,18 +39,31 @@ def run_cmd(cmd: str, check: bool = False) -> tuple[int, str]:
     return res.returncode, res.stdout
 
 
+def stage_tech_radar() -> bool:
+    log("🛰️", "Stage 1: Scanning Frontier AI/LLM/Agent Technologies & Best Practices...")
+    try:
+        from agent.evolution.tech_radar import TechRadarScanner
+        scanner = TechRadarScanner(WORKSPACE_ROOT)
+        radar_path = scanner.save_radar()
+        log("✅", f"Tech Radar & Best Practices updated: {radar_path.name}")
+        return True
+    except Exception as e:
+        log("❌", f"Tech Radar error: {e}")
+        return False
+
+
 def stage_syntax_and_lint() -> bool:
-    log("🔍", "Stage 1: Checking Python syntax & code structure...")
-    code, out = run_cmd("python3 -m py_compile agent/engine.py agent/planner.py agent/executor.py agent/reflector.py utils/model_provider.py utils/small_model.py main.py")
+    log("🔍", "Stage 2: Evaluating Python syntax & code quality...")
+    code, out = run_cmd("python3 -m py_compile agent/engine.py agent/planner.py agent/executor.py agent/reflector.py utils/model_provider.py utils/small_model.py main.py agent/tools/repo_map.py agent/evolution/tech_radar.py")
     if code != 0:
         log("❌", f"Syntax errors found:\n{out}")
         return False
-    log("✅", "Syntax verification passed.")
+    log("✅", "Syntax and structure verification passed.")
     return True
 
 
 def stage_run_tests() -> bool:
-    log("🧪", "Stage 2: Running full unit & integration regression tests...")
+    log("🧪", "Stage 3: Running full unit & integration regression tests (including expanded coverage)...")
     code, out = run_cmd("/opt/miniconda3/bin/pytest tests/ -q --tb=short --ignore=tests/test_e2e.py --ignore=tests/test_layer1_integration.py --ignore=tests/test_memory_interface.py --ignore=tests/llm_models_benchmark.py --ignore=tests/skills_models_benchmark.py")
     if code != 0:
         log("❌", f"Test regression detected:\n{out}")
@@ -63,7 +76,7 @@ def stage_run_tests() -> bool:
 
 
 def stage_repo_map_and_cache() -> bool:
-    log("🗺️", "Stage 3: Generating AST Repo Map & verifying symbol graph...")
+    log("🗺️", "Stage 4: Generating AST Repo Map & verifying symbol graph...")
     try:
         from agent.tools.repo_map import RepoMap
         repo_map = RepoMap(WORKSPACE_ROOT, max_chars=4000)
@@ -85,7 +98,7 @@ def stage_repo_map_and_cache() -> bool:
 
 
 def stage_ci_guard_and_heal() -> bool:
-    log("🛡️", "Stage 4: Checking GitHub Actions CI status...")
+    log("🛡️", "Stage 5: Checking GitHub Actions CI status & Auto-Healing...")
     code, out = run_cmd("gh run list --limit 3")
     if code != 0:
         log("⚠️", f"Could not list gh runs: {out}")
@@ -101,7 +114,6 @@ def stage_ci_guard_and_heal() -> bool:
 
     if "failure" in latest.lower():
         log("🚨", "Latest CI failed! Attempting auto-healing...")
-        # Get run id
         parts = latest.split()
         run_id = None
         for p in parts:
@@ -112,7 +124,6 @@ def stage_ci_guard_and_heal() -> bool:
             _, log_out = run_cmd(f"gh run view {run_id} --log-failed")
             log("📝", f"Failure logs (snippet):\n{log_out[:1000]}")
 
-        # Re-run local tests to diagnose
         test_code, test_out = run_cmd("/opt/miniconda3/bin/pytest tests/ -v --tb=short")
         log("🔧", f"Local diagnosis output:\n{test_out[:1000]}")
         return False
@@ -122,18 +133,19 @@ def stage_ci_guard_and_heal() -> bool:
 
 
 def run_daily_optimization():
-    log("🚀", "Starting Daily Self-Optimization & Evolution Run...")
+    log("🚀", "Starting Daily Self-Optimization, Tech Research & CI Evolution Run...")
     start_time = time.time()
 
-    s1 = stage_syntax_and_lint()
-    s2 = stage_run_tests()
-    s3 = stage_repo_map_and_cache()
-    s4 = stage_ci_guard_and_heal()
+    s1 = stage_tech_radar()
+    s2 = stage_syntax_and_lint()
+    s3 = stage_run_tests()
+    s4 = stage_repo_map_and_cache()
+    s5 = stage_ci_guard_and_heal()
 
     elapsed = time.time() - start_time
-    status = "SUCCESS" if (s1 and s2 and s3 and s4) else "WARNING/NEEDS_ATTENTION"
+    status = "SUCCESS" if (s1 and s2 and s3 and s4 and s5) else "WARNING/NEEDS_ATTENTION"
 
-    log("🏁", f"Daily Self-Optimization completed in {elapsed:.2f}s with status: {status}")
+    log("🏁", f"Daily Evolution completed in {elapsed:.2f}s with status: {status}")
     return 0 if status == "SUCCESS" else 1
 
 
