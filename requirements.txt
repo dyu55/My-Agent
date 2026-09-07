@@ -1,5 +1,5 @@
 ollama
-openai>=1,<2
+openai>=2.41.0,<3
 pydantic>=2,<3
 requests>=2,<3
 rich>=13.0
