@@ -2,7 +2,7 @@
 
 import json
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 
@@ -37,11 +37,12 @@ class ToolResult:
             ToolResult with result data
         """
         if hasattr(result, "is_success"):
-            # Result has success check method
-            success = result.is_success
+            check = result.is_success
+            success = bool(check() if callable(check) else check)
         elif hasattr(result, "passed"):
-            # TestResult
-            success = result.passed > 0
+            success = bool(result.passed) and not (
+                getattr(result, "failed", 0) or getattr(result, "errors", 0)
+            )
         elif hasattr(result, "score"):
             # QualityResult
             success = result.score >= 70
@@ -53,7 +54,13 @@ class ToolResult:
         else:
             output = str(result)
 
-        return cls(success=success, output=output)
+        return cls(
+            success=success,
+            output=output,
+            error=None
+            if success
+            else getattr(result, "error", None) or "Tool reported failure",
+        )
 
     @staticmethod
     def _stringify_result(result: Any) -> str:
@@ -61,7 +68,9 @@ class ToolResult:
         if hasattr(result, "to_dict"):
             return json.dumps(result.to_dict(), indent=2, ensure_ascii=False)
         elif hasattr(result, "__dict__"):
-            return json.dumps(result.__dict__, indent=2, ensure_ascii=False, default=str)
+            return json.dumps(
+                result.__dict__, indent=2, ensure_ascii=False, default=str
+            )
         else:
             return str(result)
 

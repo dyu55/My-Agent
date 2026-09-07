@@ -1,669 +1,100 @@
-"""Tool Executor - Executes actions using available tools.
+"""Execute policy-checked actions through the modular tool registry."""
 
-This module provides the ToolExecutor class that dispatches actions
-to appropriate tool handlers. It uses modular tool implementations
-from the agent/tools/ package.
-"""
-
-import importlib
-import json
-import logging
-import re
-import subprocess
-from dataclasses import dataclass, field
-from enum import Enum
+import ast
+from dataclasses import asdict
 from pathlib import Path
+from time import perf_counter
 from typing import Any
 
-from .tools.file_tools import FileTools, get_file_tool_handlers
-from .tools.exec_tools import ExecTools, get_exec_tool_handlers
-from .tools.search_tools import SearchTools, get_search_tool_handlers
-from .tools.git_tools import GitTools, get_git_tool_handlers
-from .tools.base import ToolResult
+from .actions import Action as Action
+from .actions import ExecutionResult as ExecutionResult
+from .actions import ExecutionStatus as ExecutionStatus
 from .tool_policy import ToolPolicy
-
-logger = logging.getLogger(__name__)
-
-try:
-    import requests
-except ImportError:
-    requests = None
-
-
-class ExecutionStatus(Enum):
-    SUCCESS = "success"
-    FAILURE = "failure"
-    PARTIAL = "partial"
-    SKIPPED = "skipped"
-
-
-@dataclass
-class Action:
-    """Represents an action to be executed."""
-
-    command: str
-    path: str | None = None
-    content: str | None = None
-    script: str | None = None
-    query: str | None = None
-    url: str | None = None
-    modules: list[str] = field(default_factory=list)
-    packages: list[str] = field(default_factory=list)
-    files: list[dict[str, str]] = field(default_factory=list)
-    old_text: str | None = None
-    git_args: str | None = None
-    start: int = 1
-    end: int = 100
-
-
-@dataclass
-class ExecutionResult:
-    """Result of executing an action."""
-
-    status: ExecutionStatus
-    command: str
-    output: str
-    error: str | None = None
-    execution_time: float = 0.0
-
-    def is_success(self) -> bool:
-        return self.status == ExecutionStatus.SUCCESS
-
-    def to_dict(self) -> dict[str, Any]:
-        return {
-            "status": self.status.value,
-            "command": self.command,
-            "output": self.output[:1000],  # Truncate for storage
-            "error": self.error,
-            "execution_time": self.execution_time,
-        }
+from .tools.base import ToolResult
+from .tools.registry import ToolRegistry
 
 
 class ToolExecutor:
-    """
-    Responsible for executing actions using available tools.
-
-    Phase: Act
-
-    Uses modular tool implementations from agent/tools/ package.
-    """
+    """Coordinate dispatch and diagnostics; tool modules own all side effects."""
 
     def __init__(
         self,
         workspace_path: str,
         tool_policy: dict[str, Any] | ToolPolicy | None = None,
+        *,
+        registry: ToolRegistry | None = None,
     ):
         self.workspace = workspace_path
         self.action_history: list[ExecutionResult] = []
         self.tool_policy = ToolPolicy.from_config(tool_policy)
-
-        # Initialize modular tools
-        self._file_tools = FileTools(workspace_path)
-        self._exec_tools = ExecTools(workspace_path)
-        self._search_tools = SearchTools(workspace_path)
-        self._git_tools = GitTools(workspace_path)
-
-        # Lazy-loaded new tools
-        self._test_tools = None
-        self._quality_tools = None
-        self._dependency_tools = None
-        self._deploy_tools = None
-
-        # Cached handler dispatch map (built once on first use)
-        self._handlers: dict[str, Any] | None = None
-
-    def _get_test_tools(self):
-        """Lazy-load test tools."""
-        if self._test_tools is None:
-            from .tools.test_tools import TestTools
-            self._test_tools = TestTools(self.workspace)
-        return self._test_tools
-
-    def _get_quality_tools(self):
-        """Lazy-load quality tools."""
-        if self._quality_tools is None:
-            from .tools.quality_tools import QualityTools
-            self._quality_tools = QualityTools(self.workspace)
-        return self._quality_tools
-
-    def _get_dependency_tools(self):
-        """Lazy-load dependency tools."""
-        if self._dependency_tools is None:
-            from .tools.dependency_tools import DependencyTools
-            self._dependency_tools = DependencyTools(self.workspace)
-        return self._dependency_tools
-
-    def _get_deploy_tools(self):
-        """Lazy-load deploy tools."""
-        if self._deploy_tools is None:
-            from .tools.deploy_tools import DeployTools
-            self._deploy_tools = DeployTools(self.workspace)
-        return self._deploy_tools
-
-    def _add_new_tool_handlers(self, handlers: dict) -> None:
-        """Add new tool handlers to the dispatch map."""
-        test = self._get_test_tools()
-        quality = self._get_quality_tools()
-        deps = self._get_dependency_tools()
-        deploy = self._get_deploy_tools()
-
-        # Test tools
-        handlers["discover_tests"] = lambda: ToolResult.ok(
-            "\n".join(test.discover_tests())
-        )
-        handlers["run_tests"] = lambda: ToolResult.from_result(
-            test.run_tests(), stringify=True
-        )
-
-        # Quality tools
-        handlers["lint"] = lambda: ToolResult.from_result(
-            quality.lint(), stringify=True
-        )
-        handlers["type_check"] = lambda: ToolResult.from_result(
-            quality.type_check(), stringify=True
-        )
-        handlers["security_scan"] = lambda: ToolResult.from_result(
-            quality.security_scan(), stringify=True
-        )
-        handlers["complexity"] = lambda: ToolResult.from_result(
-            quality.complexity(), stringify=True
-        )
-
-        # Dependency tools
-        handlers["analyze_imports"] = lambda: ToolResult.ok(
-            "\n".join(deps.analyze_imports())
-        )
-        handlers["generate_requirements"] = lambda: ToolResult.ok(
-            deps.generate_requirements()
-        )
-
-        # Deploy tools
-        handlers["gen_dockerfile"] = lambda: ToolResult.ok(
-            deploy.dockerfile_gen()
-        )
-        handlers["gen_compose"] = lambda: ToolResult.ok(
-            deploy.compose_gen()
-        )
-        handlers["gen_ci"] = lambda: ToolResult.ok(
-            deploy.github_actions_gen()
-        )
-        handlers["deploy_checklist"] = lambda: ToolResult.ok(
-            deploy.deploy_checklist()
-        )
+        self.registry = registry or ToolRegistry(workspace_path)
 
     def execute_action(self, action: Action) -> ExecutionResult:
-        """
-        Execute a single action and return the result.
-
-        Args:
-            action: The action to execute
-
-        Returns:
-            ExecutionResult with status and output
-        """
-        import time
-
-        start_time = time.time()
-
+        """Preserve structured success/error signals and record every attempt."""
+        start = perf_counter()
         try:
-            result = self._dispatch_action(action)
-            execution_time = time.time() - start_time
-
-            # Post-edit fast static syntax diagnostic for Python files
-            if not result.startswith("Error") and action.command in ("write", "edit") and action.path and action.path.endswith(".py"):
-                try:
-                    target_file = Path(self.workspace) / action.path
-                    if target_file.exists():
-                        import ast
-                        ast.parse(target_file.read_text(encoding="utf-8"), filename=str(target_file))
-                except SyntaxError as syn_err:
-                    diag = f"\n[Static Diagnostic Warning]: SyntaxError in {action.path} (line {syn_err.lineno}): {syn_err.msg}"
-                    result = result + diag
-
-            return ExecutionResult(
-                status=ExecutionStatus.SUCCESS if not result.startswith("Error")
+            tool_result = self._dispatch_action(action)
+            output = tool_result.output
+            if tool_result.success:
+                output += self._syntax_diagnostic(action)
+            elif not output:
+                output = f"Error: {tool_result.error or 'Tool execution failed'}"
+            result = ExecutionResult(
+                status=ExecutionStatus.SUCCESS
+                if tool_result.success
                 else ExecutionStatus.FAILURE,
                 command=action.command,
-                output=result,
-                execution_time=execution_time,
+                output=output,
+                error=tool_result.error if not tool_result.success else None,
+                execution_time=perf_counter() - start,
             )
-
-        except Exception as e:
-            execution_time = time.time() - start_time
-            return ExecutionResult(
+        except Exception as exc:
+            result = ExecutionResult(
                 status=ExecutionStatus.FAILURE,
                 command=action.command,
                 output="",
-                error=str(e),
-                execution_time=execution_time,
+                error=str(exc),
+                execution_time=perf_counter() - start,
             )
+        self.action_history.append(result)
+        return result
 
-    def _get_handlers(self) -> dict[str, Any]:
-        """Get or build the handler dispatch map (cached after first call)."""
-        if self._handlers is not None:
-            return self._handlers
+    def _dispatch_action(self, action: Action) -> ToolResult:
+        payload = asdict(action)
+        payload.pop("command")
+        handler = self.registry.get(action.command)
+        if handler is None:
+            return ToolResult.err(f"Unknown command '{action.command}'")
+        decision = self.tool_policy.evaluate(action.command, payload)
+        if not decision.allows_execution:
+            return ToolResult.err(decision.reason or "Blocked by tool policy")
+        return handler(payload)
 
-        # File tools
-        file_handlers = {
-            "write": lambda: self._file_tools.write_file(self._action_dict),
-            "edit": lambda: self._file_tools.edit_file(self._action_dict),
-            "read": lambda: self._file_tools.read_file(self._action_dict),
-            "mkdir": lambda: self._file_tools.mkdir(self._action_dict),
-            "list_dir": lambda: self._file_tools.list_directory(self._action_dict),
-            "list_files": lambda: self._file_tools.list_directory(self._action_dict),
-            "create_file": lambda: self._file_tools.create_files(self._action_dict),
-        }
-
-        # Execution tools
-        exec_handlers = {
-            "execute": lambda: self._exec_tools.execute_script(self._action_dict),
-            "check_dependencies": lambda: self._exec_tools.check_dependencies(self._action_dict),
-            "run_tests": lambda: self._exec_tools.run_tests(self._action_dict),
-            "pip_install": lambda: self._exec_tools.pip_install(self._action_dict),
-        }
-
-        # Search tools
-        search_handlers = {
-            "search": lambda: self._search_tools.search_files(self._action_dict),
-            "search_web": lambda: self._search_tools.search_web(self._action_dict),
-            "web_fetch": lambda: self._search_tools.fetch_url(self._action_dict),
-        }
-
-        # Git tools
-        git_handlers = {
-            "git": lambda: self._git_tools.git_command(self._action_dict),
-        }
-
-        handlers = {}
-        handlers.update(file_handlers)
-        handlers.update(exec_handlers)
-        handlers.update(search_handlers)
-        handlers.update(git_handlers)
-
-        # Add new tool handlers (lazy import, but only once)
-        self._add_new_tool_handlers(handlers)
-
-        handlers["debug"] = lambda: ToolResult.ok(f"[DEBUG]\n{self._action_dict.get('content') or 'No content'}\n[/DEBUG]")
-        handlers["finish"] = lambda: ToolResult.ok("Task completed successfully")
-
-        self._handlers = handlers
-        return handlers
-
-    def _dispatch_action(self, action: Action) -> str:
-        """Dispatch action to the appropriate handler using modular tools."""
-        # Convert Action to dict for tool handlers
-        self._action_dict = {
-            "path": action.path,
-            "content": action.content,
-            "script": action.script,
-            "query": action.query,
-            "url": action.url,
-            "modules": action.modules,
-            "packages": action.packages,
-            "files": action.files,
-            "old_text": action.old_text,
-            "git_args": action.git_args,
-            "start": action.start,
-            "end": action.end,
-        }
-
-        handlers = self._get_handlers()
-        handler = handlers.get(action.command)
-        if not handler:
-            return f"Error: Unknown command '{action.command}'"
-
-        policy_decision = self.tool_policy.evaluate(action.command, self._action_dict)
-        if not policy_decision.allows_execution:
-            return f"Error: {policy_decision.reason}"
-
-        result = handler()
-        return result.output
-
-    def _resolve_path(self, path: str | None) -> str:
-        """Resolve a path to be within the workspace."""
-        if not path:
-            return self.workspace
-        from pathlib import Path
-
-        # Strip workspace prefix if model returned an absolute/relative path
-        ws = str(Path(self.workspace).resolve())
-        if path.startswith(ws + "/") or path.startswith(ws + "\\"):
-            path = path[len(ws) + 1:]
-        ws_name = Path(self.workspace).name
-        if "/" in path and path.split("/", 1)[0] == ws_name:
-            path = path.split("/", 1)[1]
-
-        target = Path(self.workspace) / path
-        resolved = target.resolve()
-
-        # Security check: ensure path is within workspace
-        if not str(resolved).startswith(ws):
-            return "Error: Path escapes workspace"
-        return str(resolved)
-
-    def _write_file(self, action: Action) -> str:
-        """Write content to a file."""
-        if not action.path or action.content is None:
-            return "Error: Missing path or content"
-
-        if action.path.lower() in {".env", ".git", "config.py"}:
-            return "Error: Permission denied"
-
+    def _syntax_diagnostic(self, action: Action) -> str:
+        if action.command not in {"write", "edit"} or not action.path:
+            return ""
+        if not action.path.endswith(".py"):
+            return ""
+        resolved = self.registry.file_tools._resolve_path(action.path)
+        if resolved.startswith("Error:"):
+            return ""
+        target = Path(resolved)
         try:
-            target = self._resolve_path(action.path)
-            if target.startswith("Error:"):
-                return target
-
-            Path(target).parent.mkdir(parents=True, exist_ok=True)
-            Path(target).write_text(action.content, encoding="utf-8")
-
-            # Verify file was actually written
-            if not Path(target).exists():
-                return f"Error: File {action.path} write appeared to succeed but file does not exist"
-
-            size = Path(target).stat().st_size
-            return f"Success: File {action.path} written ({size} bytes)"
-        except Exception as e:
-            return f"Error writing file: {str(e)}"
-
-    def _edit_file(self, action: Action) -> str:
-        """Edit a file by replacing old_text with new_text."""
-        if not action.path or not action.old_text:
-            return "Error: Missing path or old_text"
-
-        try:
-            target = self._resolve_path(action.path)
-            if target.startswith("Error:"):
-                return target
-
-            content = Path(target).read_text(encoding="utf-8")
-            if action.old_text not in content:
-                # Include file snippet to help model understand the actual content
-                lines = content.splitlines()
-                snippet = "\n".join(f"{i+1}: {l}" for i, l in enumerate(lines[:20]))
-                return f"Error: old_text not found in file. File content (first 20 lines):\n{snippet}"
-
-            new_content = content.replace(action.old_text, action.content or "", 1)
-            Path(target).write_text(new_content, encoding="utf-8")
-            return f"Success: File {action.path} edited"
-        except Exception as e:
-            return f"Error editing file: {str(e)}"
-
-    def _read_file(self, action: Action) -> str:
-        """Read file content with line numbers."""
-        if not action.path:
-            return "Error: Missing path"
-
-        try:
-            target = self._resolve_path(action.path)
-            if target.startswith("Error:"):
-                return target
-
-            lines = Path(target).read_text(encoding="utf-8").splitlines()
-            subset = lines[action.start - 1 : action.end]
-            numbered = "\n".join(
-                f"{i + action.start}: {line}" for i, line in enumerate(subset)
+            ast.parse(target.read_text(encoding="utf-8"), filename=str(target))
+        except SyntaxError as exc:
+            return (
+                f"\n[Static Diagnostic Warning]: SyntaxError in {action.path} "
+                f"(line {exc.lineno}): {exc.msg}"
             )
-            return f"Content of {action.path}:\n{numbered}"
-        except Exception as e:
-            return f"Error reading file: {str(e)}"
-
-    def _execute_script(self, action: Action) -> str:
-        """Execute a shell command or script."""
-        if not action.script:
-            return "Error: Missing script"
-
-        try:
-            result = subprocess.run(
-                action.script,
-                shell=True,
-                capture_output=True,
-                text=True,
-                cwd=self.workspace,
-                timeout=30,
-            )
-            output = f"Exit Code: {result.returncode}\nStdout:\n{result.stdout}\nStderr:\n{result.stderr}"
-            return output
-        except subprocess.TimeoutExpired:
-            return "Error: Command timed out after 30 seconds"
-        except Exception as e:
-            return f"Error executing script: {str(e)}"
-
-    def _search_files(self, action: Action) -> str:
-        """Search for text in files."""
-        if not action.query:
-            return "Error: Missing query"
-
-        from pathlib import Path
-
-        matches = []
-        search_path = Path(self.workspace)
-        lowered = action.query.lower()
-
-        for file_path in search_path.rglob("*"):
-            if file_path.is_file():
-                try:
-                    for line_no, line in enumerate(
-                        file_path.read_text(encoding="utf-8").splitlines(), start=1
-                    ):
-                        if lowered in line.lower():
-                            matches.append(
-                                f"{file_path.relative_to(search_path)}:{line_no}: {line}"
-                            )
-                except Exception:
-                    continue
-
-        return "\n".join(matches) if matches else "No matches found"
-
-    def _search_web(self, action: Action) -> str:
-        """Search the web for information."""
-        if not action.query:
-            return "Error: Missing query"
-        if requests is None:
-            return "Error: requests library not installed"
-
-        # Simple web search using DuckDuckGo API
-        try:
-            import urllib.parse
-
-            encoded = urllib.parse.quote(action.query)
-            url = f"https://api.duckduckgo.com/?format=json&q={encoded}&t=harness_agent"
-
-            response = requests.get(url, timeout=10)
-            if response.status_code == 200:
-                data = response.json()
-                if data.get("AbstractText"):
-                    return f"Answer: {data['AbstractText']}"
-
-                results = []
-                for topic in data.get("RelatedTopics", [])[:5]:
-                    if "Text" in topic:
-                        results.append(f"- {topic['Text']}")
-
-                if results:
-                    return f"Search results for '{action.query}':\n" + "\n".join(results)
-                return f"No results found for: {action.query}"
-            return f"Error: Search failed with status {response.status_code}"
-        except Exception as e:
-            return f"Error during web search: {str(e)}"
-
-    def _fetch_url(self, action: Action) -> str:
-        """Fetch content from a URL."""
-        if not action.url:
-            return "Error: Missing URL"
-        if requests is None:
-            return "Error: requests library not installed"
-
-        try:
-            response = requests.get(
-                action.url,
-                timeout=15,
-                headers={
-                    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"
-                },
-            )
-            if response.status_code != 200:
-                return f"Error: Fetch failed with status {response.status_code}"
-
-            # Try JSON first
-            try:
-                data = response.json()
-                return f"=== JSON Response ===\n{json.dumps(data, ensure_ascii=False, indent=2)[:3000]}"
-            except Exception:
-                pass
-
-            # Clean HTML
-            text = re.sub(r"<[^>]+>", " ", response.text)
-            text = re.sub(r"\s+", " ", text).strip()
-            return f"=== Page Content ===\n{text[:3000]}"
-
-        except Exception as e:
-            return f"Error fetching page: {str(e)}"
-
-    def _list_directory(self, action: Action) -> str:
-        """List directory contents."""
-        try:
-            target = Path(self._resolve_path(action.path or "."))
-            if not target.exists():
-                return f"Error: Directory {action.path} does not exist"
-
-            entries = []
-            for item in sorted(target.iterdir()):
-                prefix = "[DIR]" if item.is_dir() else "[FILE]"
-                entries.append(f"{prefix} {item.name}")
-            return "\n".join(entries) if entries else "Directory is empty"
-        except Exception as e:
-            return f"Error listing directory: {str(e)}"
-
-    def _check_dependencies(self, action: Action) -> str:
-        """Check if Python modules are available."""
-        available = [
-            m for m in action.modules if importlib.util.find_spec(m) is not None
-        ]
-        missing = [
-            m for m in action.modules if importlib.util.find_spec(m) is None
-        ]
-        return json.dumps({"available": available, "missing": missing})
-
-    def _run_tests(self, action: Action) -> str:
-        """Run pytest tests."""
-        try:
-            result = subprocess.run(
-                ["python", "-m", "pytest", "-v", "--tb=short"],
-                capture_output=True,
-                text=True,
-                cwd=self.workspace,
-                timeout=60,
-            )
-            output = result.stdout + result.stderr
-            if result.returncode == 0:
-                return f"✅ All tests passed!\n{output[:2000]}"
-            return f"❌ Tests failed (exit code: {result.returncode})\n{output[:2000]}"
-        except FileNotFoundError:
-            return "Error: pytest not found"
-        except Exception as e:
-            return f"Error running tests: {str(e)}"
-
-    def _git_command(self, action: Action) -> str:
-        """Execute git commands."""
-        if not action.git_args:
-            return "Error: Missing git_args"
-
-        allowed = {
-            "status", "log", "diff", "branch", "checkout", "commit",
-            "push", "pull", "fetch", "merge", "add", "reset", "stash"
-        }
-        args = action.git_args.strip().split()
-
-        if args and args[0] not in allowed:
-            return f"Error: Git command '{args[0]}' not allowed"
-
-        try:
-            result = subprocess.run(
-                ["git"] + args,
-                capture_output=True,
-                text=True,
-                cwd=self.workspace,
-                timeout=30,
-            )
-            output = result.stdout + result.stderr
-            if result.returncode == 0:
-                return output[:3000] or "Git command executed successfully"
-            return f"Git error (exit {result.returncode}):\n{output[:2000]}"
-        except Exception as e:
-            return f"Error executing git: {str(e)}"
-
-    def _mkdir(self, action: Action) -> str:
-        """Create a directory."""
-        if not action.path:
-            return "Error: Missing path"
-
-        try:
-            target = Path(self._resolve_path(action.path))
-            target.mkdir(parents=True, exist_ok=True)
-            return f"Success: Directory created"
-        except Exception as e:
-            return f"Error creating directory: {str(e)}"
-
-    def _pip_install(self, action: Action) -> str:
-        """Install Python packages."""
-        if not action.packages:
-            return "Error: No packages specified"
-
-        try:
-            result = subprocess.run(
-                ["pip", "install"] + action.packages,
-                capture_output=True,
-                text=True,
-                timeout=120,
-            )
-            if result.returncode == 0:
-                return f"✅ Successfully installed: {', '.join(action.packages)}"
-            return f"❌ Installation failed:\n{result.stdout + result.stderr}"
-        except Exception as e:
-            return f"Error installing packages: {str(e)}"
-
-    def _create_files(self, action: Action) -> str:
-        """Create multiple files at once."""
-        if not action.files:
-            return "Error: No files specified"
-
-        results = []
-        for spec in action.files:
-            path = spec.get("path")
-            content = spec.get("content", "")
-
-            if not path:
-                results.append(f"Error: Missing path in {spec}")
-                continue
-
-            try:
-                file_path = Path(self.workspace) / path
-                file_path.parent.mkdir(parents=True, exist_ok=True)
-                file_path.write_text(content)
-                results.append(f"✅ Created: {path}")
-            except Exception as e:
-                results.append(f"❌ Failed to create {path}: {str(e)}")
-
-        return "\n".join(results)
-
-    def _debug(self, action: Action) -> str:
-        """Print debug information."""
-        return f"[DEBUG]\n{action.content or 'No content'}\n[/DEBUG]"
-
-    def _finish(self, action: Action) -> str:
-        """Mark task as finished."""
-        return "Task completed successfully"
+        return ""
 
     def get_execution_summary(self) -> str:
-        """Get a summary of recent executions."""
         if not self.action_history:
             return "No actions executed yet"
-
         lines = ["## Execution History\n"]
-        for i, result in enumerate(self.action_history[-10:], 1):
-            status_icon = "✅" if result.is_success() else "❌"
+        for index, result in enumerate(self.action_history[-10:], 1):
+            icon = "✅" if result.is_success() else "❌"
             lines.append(
-                f"{i}. {status_icon} {result.command} ({result.execution_time:.2f}s)"
+                f"{index}. {icon} {result.command} ({result.execution_time:.2f}s)"
             )
         return "\n".join(lines)

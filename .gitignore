@@ -80,3 +80,11 @@ workspace_*/
 workspace/__pycache__/
 workspace/memory/session_logs/
 workspace/*.db
+# Build artifacts
+build/
+dist/
+*.egg-info/
+coverage.xml
+
+# Local Python environment
+.venv/

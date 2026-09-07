@@ -12,17 +12,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-try:
-    for line in Path('.env').read_text().splitlines():
-        line = line.strip()
-        if line and '=' in line and not line.startswith('#'):
-            k, v = line.split('=', 1)
-            os.environ[k.strip()] = v.strip()
-except FileNotFoundError:
-    pass
 
 
-def test_e2e_file_creation():
+
+def check_e2e_file_creation():
     """E2E 测试：创建文件并写入内容"""
     print("\n" + "=" * 60)
     print("🧪 E2E 测试: 文件创建")
@@ -68,7 +61,7 @@ def test_e2e_file_creation():
             return False
 
 
-def test_e2e_task_decomposition():
+def check_e2e_task_decomposition():
     """E2E 测试：任务分解"""
     print("\n" + "=" * 60)
     print("🧪 E2E 测试: 任务分解")
@@ -93,7 +86,7 @@ def test_e2e_task_decomposition():
     return len(plan.get('subtasks', [])) > 0
 
 
-def test_e2e_multi_step_task():
+def check_e2e_multi_step_task():
     """E2E 测试：多步骤任务"""
     print("\n" + "=" * 60)
     print("🧪 E2E 测试: 多步骤任务")
@@ -152,7 +145,7 @@ def main():
 
     # 1. 文件创建测试
     try:
-        passed = test_e2e_file_creation()
+        passed = check_e2e_file_creation()
         results.append(("文件创建", passed))
     except Exception as e:
         print(f"❌ 测试失败: {e}")
@@ -160,7 +153,7 @@ def main():
 
     # 2. 任务分解测试
     try:
-        passed = test_e2e_task_decomposition()
+        passed = check_e2e_task_decomposition()
         results.append(("任务分解", passed))
     except Exception as e:
         print(f"❌ 测试失败: {e}")
@@ -168,7 +161,7 @@ def main():
 
     # 3. 多步骤任务测试
     try:
-        passed = test_e2e_multi_step_task()
+        passed = check_e2e_multi_step_task()
         results.append(("多步骤任务", passed))
     except Exception as e:
         print(f"❌ 测试失败: {e}")
@@ -188,5 +181,19 @@ def main():
     print(f"\n总计: {passed}/{total} 通过")
 
 
+
+def test_e2e_file_creation():
+    assert check_e2e_file_creation()
+
+
+def test_e2e_task_decomposition():
+    assert check_e2e_task_decomposition()
+
+
+def test_e2e_multi_step_task():
+    assert check_e2e_multi_step_task()
+
 if __name__ == "__main__":
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).resolve().parent.parent / ".env")
     main()

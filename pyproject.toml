@@ -9,23 +9,30 @@ description = "Local coding agent using small LLM models (8B/9B) via Ollama"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.11"
-dependencies = [
-    "ollama>=0.4.0",
-    "python-dotenv>=1.0.0",
-]
+dynamic = ["dependencies"]
+
+[project.scripts]
+myagent = "main:main"
 
 [project.optional-dependencies]
-dev = [
-    "pytest>=7.0",
-    "pytest-cov>=4.0",
-]
+dev = ["pytest>=7.0", "pytest-cov>=4.0", "ruff>=0.5.0", "build>=1.0"]
+memory = ["chromadb>=0.5.0"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-v --tb=short"
+addopts = "-v --tb=short --strict-markers"
+markers = ["live: requires a running model or embedding service; opt in with --run-live"]
+
+[tool.setuptools]
+py-modules = ["main"]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
 
 [tool.setuptools.packages.find]
-include = ["agent*", "utils*", "cli*", "memory*"]
+namespaces = false
+include = ["agent*", "utils*", "cli*", "memory*", "skills*", "mcp*", "wiki*"]
+exclude = ["tests*", "workspace*", "memory.session_logs*", "memory.chroma_db*", "memory.patterns*", "memory.sessions*"]

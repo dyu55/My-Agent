@@ -1,10 +1,10 @@
 """Execution tools - script execution, testing, package management."""
 
-import subprocess
-from pathlib import Path
-from typing import Any
-
 import importlib.util
+import json
+import subprocess
+import sys
+from typing import Any
 
 from .base import ToolResult
 
@@ -32,11 +32,20 @@ class ExecTools:
                 timeout=30,
             )
             output = f"Exit Code: {result.returncode}\nStdout:\n{result.stdout}\nStderr:\n{result.stderr}"
+            if result.returncode:
+                return ToolResult.err(
+                    f"Command exited with code {result.returncode}", output
+                )
             return ToolResult.ok(output)
         except subprocess.TimeoutExpired:
-            return ToolResult.err("Command timed out after 30 seconds", "Error: Command timed out after 30 seconds")
+            return ToolResult.err(
+                "Command timed out after 30 seconds",
+                "Error: Command timed out after 30 seconds",
+            )
         except Exception as e:
-            return ToolResult.err(f"Error executing script: {str(e)}", f"Error executing script: {str(e)}")
+            return ToolResult.err(
+                f"Error executing script: {str(e)}", f"Error executing script: {str(e)}"
+            )
 
     def check_dependencies(self, action: dict[str, Any]) -> ToolResult:
         """Check if Python modules are available."""
@@ -45,20 +54,16 @@ class ExecTools:
         if not modules:
             return ToolResult.ok('{"available": [], "missing": []}')
 
-        available = [
-            m for m in modules if importlib.util.find_spec(m) is not None
-        ]
-        missing = [
-            m for m in modules if importlib.util.find_spec(m) is None
-        ]
+        available = [m for m in modules if importlib.util.find_spec(m) is not None]
+        missing = [m for m in modules if importlib.util.find_spec(m) is None]
         result = {"available": available, "missing": missing}
-        return ToolResult.ok(str(result))
+        return ToolResult.ok(json.dumps(result))
 
     def run_tests(self, action: dict[str, Any]) -> ToolResult:
         """Run pytest tests."""
         try:
             result = subprocess.run(
-                ["python", "-m", "pytest", "-v", "--tb=short"],
+                [sys.executable, "-m", "pytest", "-v", "--tb=short"],
                 capture_output=True,
                 text=True,
                 cwd=self.workspace,
@@ -69,23 +74,27 @@ class ExecTools:
                 return ToolResult.ok(f"All tests passed!\n{output[:2000]}")
             return ToolResult.err(
                 f"Tests failed (exit code: {result.returncode})",
-                f"Tests failed (exit code: {result.returncode})\n{output[:2000]}"
+                f"Tests failed (exit code: {result.returncode})\n{output[:2000]}",
             )
         except FileNotFoundError:
             return ToolResult.err("pytest not found", "Error: pytest not found")
         except Exception as e:
-            return ToolResult.err(f"Error running tests: {str(e)}", f"Error running tests: {str(e)}")
+            return ToolResult.err(
+                f"Error running tests: {str(e)}", f"Error running tests: {str(e)}"
+            )
 
     def pip_install(self, action: dict[str, Any]) -> ToolResult:
         """Install Python packages."""
         packages = action.get("packages", [])
 
         if not packages:
-            return ToolResult.err("No packages specified", "Error: No packages specified")
+            return ToolResult.err(
+                "No packages specified", "Error: No packages specified"
+            )
 
         try:
             result = subprocess.run(
-                ["pip", "install"] + packages,
+                [sys.executable, "-m", "pip", "install"] + packages,
                 capture_output=True,
                 text=True,
                 timeout=120,
@@ -94,10 +103,13 @@ class ExecTools:
                 return ToolResult.ok(f"Successfully installed: {', '.join(packages)}")
             return ToolResult.err(
                 "Installation failed",
-                f"Installation failed:\n{result.stdout + result.stderr}"
+                f"Installation failed:\n{result.stdout + result.stderr}",
             )
         except Exception as e:
-            return ToolResult.err(f"Error installing packages: {str(e)}", f"Error installing packages: {str(e)}")
+            return ToolResult.err(
+                f"Error installing packages: {str(e)}",
+                f"Error installing packages: {str(e)}",
+            )
 
 
 def get_exec_tool_handlers(workspace: str) -> dict[str, callable]:

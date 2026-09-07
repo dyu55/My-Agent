@@ -144,10 +144,10 @@ class SkillTemplateEngine:
             parameters = "No parameters required."
 
         # Build syntax example
-        param_parts = " ".join(f"--{p['name']} <value>" for p in spec.parameters if p.get("required", True))
+        param_parts = " ".join(f"--{p['name'].replace('_', '-')} <value>" for p in spec.parameters if p.get("required", True))
         syntax = f"{spec.trigger} {param_parts}".strip()
-        syntax_example = f"{spec.trigger} {' '.join('--' + p['name'] + ' test' for p in spec.parameters[:2] if p.get('required', True))}"
-        syntax_with_options = f"{spec.trigger} {' '.join('--' + p['name'] + ' value' for p in spec.parameters)}"
+        syntax_example = f"{spec.trigger} {' '.join('--' + p['name'].replace('_', '-') + ' test' for p in spec.parameters[:2] if p.get('required', True))}"
+        syntax_with_options = f"{spec.trigger} {' '.join('--' + p['name'].replace('_', '-') + ' value' for p in spec.parameters)}"
 
         return SKILL_DOC_TEMPLATE.format(
             skill_name=spec.name,
@@ -193,7 +193,7 @@ import pytest
 from pathlib import Path
 
 from skills.registry import SkillContext
-from skills.builtin.{spec.name} import {class_name}
+from skills.builtin.{spec.name.replace('-', '_')} import {class_name}
 
 
 class Test{class_name}:

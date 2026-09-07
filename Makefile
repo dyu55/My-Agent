@@ -1,12 +1,18 @@
-.PHONY: test lint install clean run chat
+.PHONY: test test-live test-cov lint install dev-install clean run chat
 
 # Install dependencies
 install:
-	pip install -r requirements.txt
+	python -m pip install .
+
+dev-install:
+	python -m pip install -e ".[dev]"
 
 # Run tests
 test:
 	python -m pytest tests/ -v --tb=short
+
+test-live:
+	python -m pytest tests/ --run-live -m live -v --tb=short
 
 # Run tests with coverage
 test-cov:

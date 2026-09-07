@@ -2,6 +2,8 @@
 
 import json
 import subprocess
+import sys
+import tempfile
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
@@ -11,6 +13,7 @@ from typing import Any
 @dataclass
 class TestResult:
     """Result of running tests."""
+
     passed: int
     failed: int
     skipped: int
@@ -18,10 +21,11 @@ class TestResult:
     total_time: float
     output: str
     coverage: dict[str, float] | None = None
+    exit_code: int = 0
 
     @property
     def is_success(self) -> bool:
-        return self.failed == 0 and self.errors == 0
+        return self.exit_code == 0 and self.failed == 0 and self.errors == 0
 
     @property
     def total_tests(self) -> int:
@@ -55,11 +59,14 @@ class TestTools:
 
         # Filter out __init__.py and non-test files
         test_files = [
-            f for f in test_files
-            if f.name != "__init__.py" and "test_" in f.name or f.name.endswith("_test.py")
+            f
+            for f in test_files
+            if f.is_file()
+            and f.name != "__init__.py"
+            and ("test_" in f.name or f.name.endswith("_test.py"))
         ]
 
-        return [str(f.relative_to(search_path)) for f in test_files]
+        return sorted({str(f.relative_to(search_path)) for f in test_files})
 
     def run_tests(
         self,
@@ -84,109 +91,86 @@ class TestTools:
         Returns:
             TestResult with pass/fail counts
         """
-        search_path = self.workspace if path is None else Path(path)
-
-        cmd = ["python3", "-m", "pytest"]
-
+        workspace = self.workspace.resolve()
+        target = workspace if path is None else (workspace / path).resolve()
+        cmd = [sys.executable, "-m", "pytest", str(target), "--tb=short", "-q"]
+        cmd.extend(["-o", f"python_files={pattern}"])
         if verbose:
             cmd.append("-v")
-
         if fail_fast:
             cmd.append("-x")
-
-        if coverage:
-            cmd.extend(["--cov=. ", "--cov-report=json", "--cov-report=term"])
-            # Ensure pytest-cov is installed
-            self._ensure_package("pytest-cov")
-
         if parallel:
-            cmd.append("-n auto")
+            cmd.extend(["-n", "auto"])
             self._ensure_package("pytest-xdist")
 
-        cmd.extend(["--tb=short", "-q"])
-
-        if path:
-            cmd.append(str(search_path / pattern))
-        else:
-            cmd.append(str(search_path))
-
         try:
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                cwd=search_path,
-                timeout=120,
-            )
-
-            output = result.stdout + result.stderr
-
-            # Parse pytest output
-            passed = failed = skipped = errors = 0
-            total_time = 0.0
-
-            # Parse pytest JSON report if available
-            json_report = search_path / "coverage" / "coverage.json"
-            if json_report.exists():
-                with open(json_report) as f:
-                    cov_data = json.load(f)
-                    coverage = cov_data.get("totals", {}).get("percent_covered", 0) / 100
-            else:
-                coverage = None
-
-            # Parse text output
-            lines = output.split("\n")
-            for line in lines:
-                if " passed" in line or "failed" in line:
-                    parts = line.split()
-                    for i, part in enumerate(parts):
-                        if part == "passed":
-                            try:
-                                passed = int(parts[i - 1])
-                            except (ValueError, IndexError):
-                                pass
-                        if part == "failed":
-                            try:
-                                failed = int(parts[i - 1])
-                            except (ValueError, IndexError):
-                                pass
-
-            # Extract timing
-            for line in lines:
-                if "took" in line.lower():
-                    try:
-                        time_part = line.split("took")[1].split()[0]
-                        total_time = float(time_part)
-                    except (ValueError, IndexError):
-                        pass
-
-            return TestResult(
-                passed=passed,
-                failed=failed,
-                skipped=skipped,
-                errors=errors,
-                total_time=total_time,
-                output=output[:2000],
-                coverage={"total": coverage} if coverage is not None else None,
-            )
-
+            with tempfile.TemporaryDirectory(prefix="myagent-pytest-") as report_dir:
+                junit_path = Path(report_dir) / "results.xml"
+                coverage_path = Path(report_dir) / "coverage.json"
+                cmd.append(f"--junitxml={junit_path}")
+                if coverage:
+                    self._ensure_package("pytest-cov")
+                    cmd.extend(
+                        [f"--cov={workspace}", f"--cov-report=json:{coverage_path}"]
+                    )
+                result = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    text=True,
+                    cwd=workspace,
+                    timeout=120,
+                )
+                output = result.stdout + result.stderr
+                passed = failed = skipped = errors = 0
+                total_time = 0.0
+                if junit_path.exists():
+                    root = ET.parse(junit_path).getroot()
+                    for suite in root.iter("testsuite"):
+                        failed += int(suite.get("failures", 0))
+                        errors += int(suite.get("errors", 0))
+                        skipped += int(suite.get("skipped", 0))
+                        passed += max(
+                            0,
+                            int(suite.get("tests", 0))
+                            - int(suite.get("failures", 0))
+                            - int(suite.get("errors", 0))
+                            - int(suite.get("skipped", 0)),
+                        )
+                        total_time += float(suite.get("time", 0))
+                elif result.returncode == 0:
+                    # Missing structured evidence is not a successful test run.
+                    errors = 1
+                if result.returncode and not failed and not errors:
+                    errors = 1
+                coverage_result = None
+                if coverage and coverage_path.exists():
+                    data = json.loads(coverage_path.read_text())
+                    coverage_result = {
+                        "total": data.get("totals", {}).get("percent_covered", 0) / 100
+                    }
+                return TestResult(
+                    passed=passed,
+                    failed=failed,
+                    skipped=skipped,
+                    errors=errors,
+                    total_time=total_time,
+                    output=output[:2000],
+                    coverage=coverage_result,
+                    exit_code=result.returncode,
+                )
         except subprocess.TimeoutExpired:
             return TestResult(
-                passed=0,
-                failed=0,
-                skipped=0,
-                errors=1,
-                total_time=120.0,
-                output="Test execution timed out after 120 seconds",
+                0,
+                0,
+                0,
+                1,
+                120.0,
+                "Test execution timed out after 120 seconds",
+                exit_code=124,
             )
-        except Exception as e:
+        except Exception as exc:
             return TestResult(
-                passed=0,
-                failed=0,
-                skipped=0,
-                errors=1,
-                total_time=0.0,
-                output=f"Error running tests: {str(e)}",
+                0, 0, 0, 1, 0.0, f"Error running tests: {exc}", exit_code=1
             )
 
     def generate_fixture(
@@ -235,7 +219,7 @@ def sample_{model_class.lower()}() -> {model_class}:
             else:
                 sample_value = "None"
 
-            fixture_code += f'        {field_name}={sample_value},\n'
+            fixture_code += f"        {field_name}={sample_value},\n"
 
         fixture_code += "    )\n\n"
 
@@ -263,7 +247,9 @@ def sample_{model_class.lower()}() -> {model_class}:
 
         # Relations fixture
         fixture_code += "@pytest.fixture\n"
-        fixture_code += "def " + model_lower + "_with_relations() -> " + model_class + ":\n"
+        fixture_code += (
+            "def " + model_lower + "_with_relations() -> " + model_class + ":\n"
+        )
         fixture_code += '    """Create a ' + model_class + ' with related objects."""\n'
         fixture_code += "    # Customize based on your model's relationships\n"
         fixture_code += "    return " + model_class + "(\n"
@@ -310,7 +296,7 @@ class Test{model_class_to_classname(module_name)}:
             expected = case.get("expected", None)
 
             # Generate test method
-            test_code += f'    def {test_name}(self):\n'
+            test_code += f"    def {test_name}(self):\n"
             test_code += f'        """Test: {case.get("description", test_name)}"""\n'
 
             if params:
@@ -348,8 +334,10 @@ class Test{model_class_to_classname(module_name)}:
         except ImportError:
             try:
                 subprocess.run(
-                    ["python3", "-m", "pip", "install", package],
+                    [sys.executable, "-m", "pip", "install", package],
                     capture_output=True,
+                    check=True,
+                    timeout=120,
                 )
                 return True
             except Exception:
@@ -367,6 +355,10 @@ def get_test_handlers() -> dict[str, Any]:
     return {
         "discover_tests": lambda path: TestTools("").discover_tests(path),
         "run_tests": lambda path, **kwargs: TestTools("").run_tests(path, **kwargs),
-        "generate_fixture": lambda model, fields, **kw: TestTools("").generate_fixture(model, fields, **kw),
-        "create_test_file": lambda module, cases, **kw: TestTools("").create_test_file(module, cases, **kw),
+        "generate_fixture": lambda model, fields, **kw: TestTools("").generate_fixture(
+            model, fields, **kw
+        ),
+        "create_test_file": lambda module, cases, **kw: TestTools("").create_test_file(
+            module, cases, **kw
+        ),
     }

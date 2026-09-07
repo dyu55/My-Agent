@@ -1,9 +1,8 @@
 import difflib
-import json
 from pathlib import Path
 from typing import Any
 
-from .base import BaseTool, ToolResult
+from .base import ToolResult
 from .rollback_tools import RollbackManager
 
 
@@ -14,7 +13,9 @@ class FileTools:
         self.workspace = workspace
         self.rollback_enabled = enable_rollback
         self._rollback_manager = RollbackManager() if enable_rollback else None
-        self._pending_edits: dict[str, str] = {}  # Track pending edits for potential rollback
+        self._pending_edits: dict[
+            str, str
+        ] = {}  # Track pending edits for potential rollback
 
     @staticmethod
     def _fuzzy_replace(file_content: str, old_text: str, new_text: str) -> str | None:
@@ -47,7 +48,9 @@ class FileTools:
                 cand_stripped = [l.strip() for l in candidate_slice if l.strip()]
                 if cand_stripped == old_stripped:
                     new_lines = norm_new.split("\n")
-                    result_lines = file_lines[:i] + new_lines + file_lines[i + len(old_lines):]
+                    result_lines = (
+                        file_lines[:i] + new_lines + file_lines[i + len(old_lines) :]
+                    )
                     return "\n".join(result_lines)
 
         # 4. Fuzzy sliding window sequence matcher
@@ -59,15 +62,23 @@ class FileTools:
 
             for i in range(len(file_lines) - window_size + 1):
                 candidate_lines = file_lines[i : i + window_size]
-                cand_str_strip = "\n".join(l.strip() for l in candidate_lines if l.strip())
-                ratio = difflib.SequenceMatcher(None, cand_str_strip, old_str_strip).ratio()
+                cand_str_strip = "\n".join(
+                    l.strip() for l in candidate_lines if l.strip()
+                )
+                ratio = difflib.SequenceMatcher(
+                    None, cand_str_strip, old_str_strip
+                ).ratio()
                 if ratio > best_ratio and ratio >= 0.85:
                     best_ratio = ratio
                     best_idx = i
 
             if best_idx != -1 and best_ratio >= 0.85:
                 new_lines = norm_new.split("\n")
-                result_lines = file_lines[:best_idx] + new_lines + file_lines[best_idx + window_size:]
+                result_lines = (
+                    file_lines[:best_idx]
+                    + new_lines
+                    + file_lines[best_idx + window_size :]
+                )
                 return "\n".join(result_lines)
 
         return None
@@ -75,13 +86,13 @@ class FileTools:
     def _resolve_path(self, path: str | None) -> str:
         """Resolve a path to be within the workspace."""
         if not path:
-            return self.workspace
+            return str(Path(self.workspace).resolve())
 
         # Strip workspace prefix if model returned an absolute/relative path
         # that already includes the workspace (e.g., "_workspaces/task/file.py")
         ws = str(Path(self.workspace).resolve())
         if path.startswith(ws + "/") or path.startswith(ws + "\\"):
-            path = path[len(ws) + 1:]
+            path = path[len(ws) + 1 :]
         # Also handle relative workspace prefix
         ws_name = Path(self.workspace).name
         if "/" in path and path.split("/", 1)[0] == ws_name:
@@ -90,9 +101,16 @@ class FileTools:
         target = Path(self.workspace) / path
         resolved = target.resolve()
 
-        if not str(resolved).startswith(ws):
+        if not resolved.is_relative_to(Path(ws)):
             return "Error: Path escapes workspace"
         return str(resolved)
+
+    def _is_protected(self, target: str) -> bool:
+        relative = Path(target).relative_to(Path(self.workspace).resolve())
+        return ".git" in relative.parts or relative.as_posix().lower() in {
+            ".env",
+            "config.py",
+        }
 
     def write_file(self, action: dict[str, Any]) -> ToolResult:
         """Write content to a file."""
@@ -100,15 +118,18 @@ class FileTools:
         content = action.get("content")
 
         if not path or content is None:
-            return ToolResult.err("Missing path or content", "Error: Missing path or content")
+            return ToolResult.err(
+                "Missing path or content", "Error: Missing path or content"
+            )
 
-        if path.lower() in {".env", ".git", "config.py"}:
-            return ToolResult.err("Permission denied", "Error: Permission denied")
-
+        target = ""
         try:
             target = self._resolve_path(path)
             if target.startswith("Error:"):
                 return ToolResult.err(target, f"Error: {target}")
+
+            if self._is_protected(target):
+                return ToolResult.err("Permission denied", "Error: Permission denied")
 
             # Backup existing file before overwriting
             if self._rollback_manager and Path(target).exists():
@@ -129,7 +150,9 @@ class FileTools:
             if self._rollback_manager and target in self._pending_edits:
                 self._rollback_manager.rollback(target)
                 del self._pending_edits[target]
-            return ToolResult.err(f"Error writing file: {str(e)}", f"Error writing file: {str(e)}")
+            return ToolResult.err(
+                f"Error writing file: {str(e)}", f"Error writing file: {str(e)}"
+            )
 
     def edit_file(self, action: dict[str, Any]) -> ToolResult:
         """Edit a file by replacing old_text with new_text (supporting fuzzy matching)."""
@@ -138,20 +161,26 @@ class FileTools:
         content = action.get("content", "")
 
         if not path or not old_text:
-            return ToolResult.err("Missing path or old_text", "Error: Missing path or old_text")
+            return ToolResult.err(
+                "Missing path or old_text", "Error: Missing path or old_text"
+            )
 
+        target = ""
         try:
             target = self._resolve_path(path)
             if target.startswith("Error:"):
                 return ToolResult.err(target, f"Error: {target}")
 
+            if self._is_protected(target):
+                return ToolResult.err("Permission denied", "Error: Permission denied")
+
             file_content = Path(target).read_text(encoding="utf-8")
             new_content = self._fuzzy_replace(file_content, old_text, content)
-            
+
             if new_content is None:
                 return ToolResult.err(
                     "old_text not found in file (fuzzy match failed)",
-                    "Error: old_text not found in file (fuzzy match failed)"
+                    "Error: old_text not found in file (fuzzy match failed)",
                 )
 
             # Backup before edit
@@ -168,13 +197,17 @@ class FileTools:
 
             return ToolResult.ok(f"Success: File {path} edited")
         except FileNotFoundError:
-            return ToolResult.err(f"File not found: {path}", f"Error: File not found: {path}")
+            return ToolResult.err(
+                f"File not found: {path}", f"Error: File not found: {path}"
+            )
         except Exception as e:
             # Rollback on error
             if self._rollback_manager and target in self._pending_edits:
                 self._rollback_manager.rollback(target)
                 del self._pending_edits[target]
-            return ToolResult.err(f"Error editing file: {str(e)}", f"Error editing file: {str(e)}")
+            return ToolResult.err(
+                f"Error editing file: {str(e)}", f"Error editing file: {str(e)}"
+            )
 
     def read_file(self, action: dict[str, Any]) -> ToolResult:
         """Read file content with line numbers."""
@@ -191,15 +224,19 @@ class FileTools:
                 return ToolResult.err(target, f"Error: {target}")
 
             lines = Path(target).read_text(encoding="utf-8").splitlines()
-            subset = lines[start - 1:end]
+            subset = lines[start - 1 : end]
             numbered = "\n".join(
                 f"{i + start}: {line}" for i, line in enumerate(subset)
             )
             return ToolResult.ok(f"Content of {path}:\n{numbered}")
         except FileNotFoundError:
-            return ToolResult.err(f"File not found: {path}", f"Error: File not found: {path}")
+            return ToolResult.err(
+                f"File not found: {path}", f"Error: File not found: {path}"
+            )
         except Exception as e:
-            return ToolResult.err(f"Error reading file: {str(e)}", f"Error reading file: {str(e)}")
+            return ToolResult.err(
+                f"Error reading file: {str(e)}", f"Error reading file: {str(e)}"
+            )
 
     def mkdir(self, action: dict[str, Any]) -> ToolResult:
         """Create a directory."""
@@ -209,28 +246,47 @@ class FileTools:
             return ToolResult.err("Missing path", "Error: Missing path")
 
         try:
-            target = Path(self._resolve_path(path))
+            resolved = self._resolve_path(path)
+            if resolved.startswith("Error:"):
+                return ToolResult.err(resolved, resolved)
+            if self._is_protected(resolved):
+                return ToolResult.err("Permission denied", "Error: Permission denied")
+            target = Path(resolved)
             target.mkdir(parents=True, exist_ok=True)
             return ToolResult.ok("Success: Directory created")
         except Exception as e:
-            return ToolResult.err(f"Error creating directory: {str(e)}", f"Error creating directory: {str(e)}")
+            return ToolResult.err(
+                f"Error creating directory: {str(e)}",
+                f"Error creating directory: {str(e)}",
+            )
 
     def list_directory(self, action: dict[str, Any]) -> ToolResult:
         """List directory contents."""
         path = action.get("path", ".")
 
         try:
-            target = Path(self._resolve_path(path))
+            resolved = self._resolve_path(path)
+            if resolved.startswith("Error:"):
+                return ToolResult.err(resolved, resolved)
+            target = Path(resolved)
             if not target.exists():
-                return ToolResult.err(f"Directory does not exist", f"Error: Directory {path} does not exist")
+                return ToolResult.err(
+                    f"Directory does not exist",
+                    f"Error: Directory {path} does not exist",
+                )
 
             entries = []
             for item in sorted(target.iterdir()):
                 prefix = "[DIR]" if item.is_dir() else "[FILE]"
                 entries.append(f"{prefix} {item.name}")
-            return ToolResult.ok("\n".join(entries) if entries else "Directory is empty")
+            return ToolResult.ok(
+                "\n".join(entries) if entries else "Directory is empty"
+            )
         except Exception as e:
-            return ToolResult.err(f"Error listing directory: {str(e)}", f"Error listing directory: {str(e)}")
+            return ToolResult.err(
+                f"Error listing directory: {str(e)}",
+                f"Error listing directory: {str(e)}",
+            )
 
     def create_files(self, action: dict[str, Any]) -> ToolResult:
         """Create multiple files at once."""
@@ -240,22 +296,25 @@ class FileTools:
             return ToolResult.err("No files specified", "Error: No files specified")
 
         results = []
+        errors = []
         for spec in files:
             path = spec.get("path")
             content = spec.get("content", "")
 
             if not path:
-                results.append(f"Error: Missing path in {spec}")
+                errors.append("Missing path in file specification")
+                results.append("Error: Missing path in file specification")
                 continue
 
-            try:
-                file_path = Path(self.workspace) / path
-                file_path.parent.mkdir(parents=True, exist_ok=True)
-                file_path.write_text(content)
+            result = self.write_file({"path": path, "content": content})
+            if result.success:
                 results.append(f"Created: {path}")
-            except Exception as e:
-                results.append(f"Failed to create {path}: {str(e)}")
+            else:
+                errors.append(result.error or f"Failed to create {path}")
+                results.append(f"Failed to create {path}: {result.error}")
 
+        if errors:
+            return ToolResult.err("; ".join(errors), "\n".join(results))
         return ToolResult.ok("\n".join(results))
 
 

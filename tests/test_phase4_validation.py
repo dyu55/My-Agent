@@ -13,14 +13,7 @@ from typing import Any
 # 加载环境变量
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-try:
-    for line in Path('.env').read_text().splitlines():
-        line = line.strip()
-        if line and '=' in line and not line.startswith('#'):
-            k, v = line.split('=', 1)
-            os.environ[k.strip()] = v.strip()
-except FileNotFoundError:
-    pass
+
 
 from utils.model_provider import (
     ModelManager,
@@ -42,6 +35,7 @@ class BenchmarkResult:
 
 
 class TestRunner:
+    __test__ = False
     """测试运行器"""
 
     def __init__(self):
@@ -55,6 +49,8 @@ class TestRunner:
 
         try:
             result = test_func(*args, **kwargs)
+            if result is False:
+                raise AssertionError("Check returned False")
             elapsed = time.time() - start
             print(f"✅ ({elapsed:.2f}s)")
 
@@ -105,7 +101,7 @@ class TestRunner:
         return passed == total
 
 
-def test_model_provider_factory():
+def check_model_provider_factory():
     """测试模型提供者工厂"""
     print("\n" + "=" * 60)
     print("🧪 测试 ModelProviderFactory")
@@ -137,7 +133,7 @@ def test_model_provider_factory():
     return runner.print_summary()
 
 
-def test_ollama_provider():
+def check_ollama_provider():
     """测试 Ollama provider"""
     print("\n" + "=" * 60)
     print("🧪 测试 OllamaProvider")
@@ -183,7 +179,7 @@ def test_ollama_provider():
     return runner.print_summary()
 
 
-def test_model_manager():
+def check_model_manager():
     """测试 ModelManager"""
     print("\n" + "=" * 60)
     print("🧪 测试 ModelManager")
@@ -226,40 +222,18 @@ def test_model_manager():
     return runner.print_summary()
 
 
-def test_unit_tests():
-    """运行现有的单元测试"""
-    print("\n" + "=" * 60)
-    print("🧪 运行单元测试 (test_agent.py)")
-    print("=" * 60)
-
-    try:
-        import subprocess
-
-        # 先检查是否可以导入 main 中的必要类型
-        try:
-            import main
-            if not hasattr(main, 'Action'):
-                print("   ⚠️ test_agent.py 需要更新的导入方式，跳过")
-                return True
-        except ImportError as e:
-            if "cannot import name 'Action'" in str(e):
-                print("   ⚠️ test_agent.py 与当前 main.py 结构不兼容，跳过")
-                return True
-            raise
-
-        result = subprocess.run(
-            ["python", "-m", "pytest", "tests/test_agent.py", "-v"],
-            cwd=Path(__file__).parent.parent,
-            capture_output=True,
-            text=True
-        )
-        print(result.stdout)
-        if result.stderr:
-            print(result.stderr)
-        return result.returncode == 0
-    except Exception as e:
-        print(f"   ⚠️ 无法运行单元测试: {e}")
-        return True  # 不影响整体测试结果
+def check_unit_tests():
+    """Run the real unit-test suite and propagate its process status."""
+    import subprocess
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest", "tests/test_agent.py", "-v"],
+        cwd=Path(__file__).resolve().parent.parent,
+        capture_output=True, text=True, timeout=120,
+    )
+    print(result.stdout)
+    if result.stderr:
+        print(result.stderr)
+    return result.returncode == 0
 
 
 class PerformanceBenchmark:
@@ -400,19 +374,19 @@ def main():
     all_passed = True
 
     # 1. 模型提供者工厂测试
-    if not test_model_provider_factory():
+    if not check_model_provider_factory():
         all_passed = False
 
     # 2. Ollama Provider 测试
-    if not test_ollama_provider():
+    if not check_ollama_provider():
         all_passed = False
 
     # 3. ModelManager 测试
-    if not test_model_manager():
+    if not check_model_manager():
         all_passed = False
 
     # 4. 单元测试
-    if not test_unit_tests():
+    if not check_unit_tests():
         all_passed = False
 
     # 5. 性能基准测试
@@ -428,5 +402,23 @@ def main():
     print("=" * 70)
 
 
+
+def test_model_provider_factory():
+    assert check_model_provider_factory()
+
+
+def test_ollama_provider():
+    assert check_ollama_provider()
+
+
+def test_model_manager():
+    assert check_model_manager()
+
+
+def test_unit_tests():
+    assert check_unit_tests()
+
 if __name__ == "__main__":
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).resolve().parent.parent / ".env")
     main()

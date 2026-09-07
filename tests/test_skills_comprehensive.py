@@ -7,7 +7,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 
-def test_imports():
+def check_imports():
     """Test all imports work correctly."""
     print("=" * 60)
     print("TEST 1: Import Verification")
@@ -59,7 +59,7 @@ def test_imports():
     return all_passed
 
 
-def test_skill_engine_core():
+def check_skill_engine_core():
     """Test SkillEngine core functionality."""
     print("=" * 60)
     print("TEST 2: SkillEngine Core")
@@ -147,7 +147,7 @@ def test_skill_engine_core():
     return all_passed
 
 
-def test_builtin_skills():
+def check_builtin_skills():
     """Test all 7 built-in skills."""
     print("=" * 60)
     print("TEST 3: Built-in Skills")
@@ -215,7 +215,7 @@ class Calculator:
     return all_passed
 
 
-def test_skill_templates():
+def check_skill_templates():
     """Test SkillTemplateEngine."""
     print("=" * 60)
     print("TEST 4: Skill Templates")
@@ -252,6 +252,9 @@ def test_skill_templates():
 
     # Test scaffold generation
     scaffold = engine.generate_test_scaffold(spec)
+    import ast
+    ast.parse(code)
+    ast.parse(scaffold)
     tests.append(("test scaffold", "TestMyCustomSkill" in scaffold, "Test class OK"))
 
     # Print results
@@ -266,7 +269,7 @@ def test_skill_templates():
     return all_passed
 
 
-def test_integration():
+def check_integration():
     """Test full integration."""
     print("=" * 60)
     print("TEST 5: Integration Test")
@@ -329,11 +332,11 @@ def main():
 
     results = []
 
-    results.append(("Import Verification", test_imports()))
-    results.append(("SkillEngine Core", test_skill_engine_core()))
-    results.append(("Built-in Skills", test_builtin_skills()))
-    results.append(("Skill Templates", test_skill_templates()))
-    results.append(("Integration", test_integration()))
+    results.append(("Import Verification", check_imports()))
+    results.append(("SkillEngine Core", check_skill_engine_core()))
+    results.append(("Built-in Skills", check_builtin_skills()))
+    results.append(("Skill Templates", check_skill_templates()))
+    results.append(("Integration", check_integration()))
 
     print("=" * 60)
     print("📊 FINAL RESULTS")
@@ -354,6 +357,25 @@ def main():
 
     return all_passed
 
+
+def test_imports():
+    assert check_imports()
+
+
+def test_skill_engine_core():
+    assert check_skill_engine_core()
+
+
+def test_builtin_skills():
+    assert check_builtin_skills()
+
+
+def test_skill_templates():
+    assert check_skill_templates()
+
+
+def test_integration():
+    assert check_integration()
 
 if __name__ == "__main__":
     success = main()

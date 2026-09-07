@@ -87,7 +87,7 @@ Factory pattern unified access with native thinking stream extraction:
 # Clone and install
 git clone git@github.com:dyu55/My-Agent.git
 cd My-Agent
-pip install -r requirements.txt
+python -m pip install .
 
 # Interactive CLI mode
 python main.py --chat
@@ -104,6 +104,7 @@ python main.py --provider ollama --model gemma-4-31b-it
 ```
 myAgent/
 ├── agent/                     # Agent core
+│   ├── actions.py            # Shared action/result contracts
 │   ├── engine.py             # AgentEngine - Plan/Act/Reflect loop
 │   ├── planner.py           # TaskPlanner - task decomposition
 │   ├── executor.py          # ToolExecutor - action execution
@@ -202,8 +203,15 @@ OLLAMA_HOST=http://localhost:11434
 ## Development
 
 ```bash
-# Run all tests
-pytest -v
+# Install development tools
+python -m pip install -e ".[dev]"
+
+# Run the automated suite (external-service tests are explicitly skipped)
+python -m pytest
+
+# Opt in after configuring and starting the required model/embedding services
+python -m pip install ".[memory]"
+python -m pytest --run-live -m live
 
 # Run specific test suites
 pytest tests/test_skill_engine.py -v
@@ -212,6 +220,12 @@ pytest tests/test_memory_interface.py -v
 # Start interactive CLI
 python main.py --chat
 ```
+
+## Refactoring and validation
+
+The executor now uses structured tool outcomes, records every attempt, and delegates side effects to one tool registry. Shell exit codes and pytest JUnit reports determine success. File reads, edits, directory operations, and batch writes share workspace containment checks.
+
+Installing the package provides the `myagent` command and includes the CLI, skills, MCP, wiki, and memory modules. ChromaDB is available through the optional `memory` extra. See [the refactoring report](docs/REFACTORING.md) for test scope and compatibility notes.
 
 ## Architecture Highlights
 
@@ -238,10 +252,10 @@ MemoryEntry               # Memory with embedding, tags, session_id
 
 ## Tech Stack
 
-- **Runtime**: Python 3.13+
+- **Runtime**: Python 3.11+
 - **LLM**: Ollama (local), OpenAI, Anthropic
 - **Vector DB**: ChromaDB + Ollama embeddings
-- **Testing**: pytest (44+ test cases)
+- **Testing**: pytest; service-dependent tests require explicit opt-in
 - **CLI**: Claude Code style interaction
 
 ## License
