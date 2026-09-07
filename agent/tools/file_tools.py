@@ -1,4 +1,5 @@
 import difflib
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -140,7 +141,7 @@ class FileTools:
             Path(target).write_text(content, encoding="utf-8")
 
             # Commit the backup (successful write)
-            if target in self._pending_edits:
+            if self._rollback_manager and target in self._pending_edits:
                 self._rollback_manager.commit(target)
                 del self._pending_edits[target]
 
@@ -191,7 +192,7 @@ class FileTools:
             Path(target).write_text(new_content, encoding="utf-8")
 
             # Commit the backup (successful edit)
-            if target in self._pending_edits:
+            if self._rollback_manager and target in self._pending_edits:
                 self._rollback_manager.commit(target)
                 del self._pending_edits[target]
 
@@ -318,7 +319,9 @@ class FileTools:
         return ToolResult.ok("\n".join(results))
 
 
-def get_file_tool_handlers(workspace: str) -> dict[str, callable]:
+def get_file_tool_handlers(
+    workspace: str,
+) -> dict[str, Callable[[dict[str, Any]], ToolResult]]:
     """Get file tool handlers for ToolExecutor."""
     tools = FileTools(workspace)
     return {

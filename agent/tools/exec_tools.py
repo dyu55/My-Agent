@@ -4,6 +4,7 @@ import importlib.util
 import json
 import subprocess
 import sys
+from collections.abc import Callable
 from typing import Any
 
 from .base import ToolResult
@@ -112,7 +113,9 @@ class ExecTools:
             )
 
 
-def get_exec_tool_handlers(workspace: str) -> dict[str, callable]:
+def get_exec_tool_handlers(
+    workspace: str,
+) -> dict[str, Callable[[dict[str, Any]], ToolResult]]:
     """Get execution tool handlers for ToolExecutor."""
     tools = ExecTools(workspace)
     return {

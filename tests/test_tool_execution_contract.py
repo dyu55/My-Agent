@@ -207,3 +207,25 @@ def test_dependency_report_is_valid_json(tmp_path):
         "available": ["json"],
         "missing": ["not_a_real_module_zz"],
     }
+
+
+def test_junit_entity_expansion_is_rejected(tmp_path, monkeypatch):
+    from pathlib import Path
+    from subprocess import CompletedProcess
+
+    def malicious_report(command, **kwargs):
+        report = next(
+            arg.split("=", 1)[1] for arg in command if arg.startswith("--junitxml=")
+        )
+        Path(report).write_text(
+            '<!DOCTYPE testsuites [<!ENTITY payload "untrusted">]>'
+            '<testsuites><testsuite tests="1" failures="0" errors="0">'
+            '<testcase name="&payload;"/></testsuite></testsuites>'
+        )
+        return CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr("agent.tools.test_tools.subprocess.run", malicious_report)
+    result = PytestTools(str(tmp_path)).run_tests()
+    assert not result.is_success
+    assert result.errors == 1
+    assert "EntitiesForbidden" in result.output

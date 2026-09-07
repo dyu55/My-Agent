@@ -4,10 +4,11 @@ import json
 import subprocess
 import sys
 import tempfile
-import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+from defusedxml import ElementTree as ET
 
 
 @dataclass
@@ -125,6 +126,8 @@ class TestTools:
                 total_time = 0.0
                 if junit_path.exists():
                     root = ET.parse(junit_path).getroot()
+                    if root is None:
+                        raise ValueError("JUnit report has no root element")
                     for suite in root.iter("testsuite"):
                         failed += int(suite.get("failures", 0))
                         errors += int(suite.get("errors", 0))
