@@ -1,263 +1,87 @@
-# MyAgent - Local Coding Agent
+# MyAgent · Local coding agent
 
-> A coding agent that uses local 8B/9B models to autonomously develop complete projects. Inspired by Claude Code architecture with Plan/Act/Reflect loop and multi-layer external memory.
+![MyAgent — Plan, execute and verify](docs/screenshots/myagent-overview.png)
 
-**GitHub**: [dyu55/My-Agent](https://github.com/dyu55/My-Agent)
+Turn a task into a plan, execute tools, check the result, and resume from a durable checkpoint. Inspect the actual file changes and test results in **Run Studio**, the included local browser viewer.
 
-## Features
+**Version 1.0 is written from scratch.** It replaces the earlier collection of agent, skill, memory, and provider modules with a small typed runtime and an explicit execution state machine. The earlier implementation remains available in Git history.
 
-### Core Agent Architecture
+## Try a real execution without a model
 
-- 🤖 **Claude Code Style Interaction** - Type a task description to execute
-- 🔄 **Plan/Act/Reflect Loop** - Task planning, execution, reflection, error recovery
-- 🧠 **LLM Reflection** - Automatic error classification (5 categories) and recovery suggestions
-- 📋 **Task Decomposition** - Subtask queue with dependency tracking
-- 🔀 **Multi-Agent Coordination** - Parallel task execution with speedup measurement
-
-### Memory System (Three-Layer Architecture)
-
-| Layer | Component | Function |
-|-------|-----------|----------|
-| L1 | ConversationMemory | Short-term, auto-compression |
-| L2 | Wiki + Embeddings | Long-term, semantic search |
-| L3 | ChromaDB + Ollama | Vector storage, cross-session persistence |
-
-- 🔍 **Semantic Search** - ChromaDB vector storage with `nomic-embed-text` embeddings
-- 🧹 **MemoryCleanupPolicy** - Age-based and access-based cleanup strategies
-- 📝 **Auto-capture** - Automatic task summaries with tags
-- 💾 **State Persistence** - progress.json, checkpoints, session logs
-
-### Modular Tool System
-
-| Tool | Capabilities |
-|------|--------------|
-| `file_tools` | Read, write, edit, mkdir, glob, create_files |
-| `exec_tools` | Shell commands, dependency check, pip install |
-| `search_tools` | File search, web search, URL fetch |
-| `git_tools` | Commit, push, branch, status |
-| `test_tools` | Test discovery, pytest execution |
-| `quality_tools` | Lint, type check, security scan |
-| `deploy_tools` | Dockerfile, docker-compose, GitHub Actions |
-| `mcp_tools` | Model Context Protocol support |
-| `browser_tools` | Browser automation |
-| `rollback_tools` | Safe rollback mechanism |
-
-### Skills System
-
-Parameterized skills with chaining, prerequisites, and template rendering:
-
-| Command | Function |
-|---------|----------|
-| `/code-review` | Code review (TODO/FIXME, debug statements, bare except) |
-| `/security-review` | Security scan (hardcoded passwords, SQL injection, shell injection) |
-| `/simplify` | Code refactoring (duplicate code, long functions) |
-| `/init` | Initialize CLAUDE.md project documentation |
-| `/test-gen` | Auto-generate unit tests |
-| `/api-design` | API design review |
-| `/doc-gen` | Documentation generation |
-| `/browser` | Browser automation |
-
-**SkillEngine Features:**
-- Parameter parsing with hyphen support (`--file-path`)
-- Chain execution (multi-skill pipelines)
-- Prerequisite validation
-- Template rendering with context variables
-
-### Multi-Model Support (2026 Lineup)
-
-Factory pattern unified access with native thinking stream extraction:
-
-- **Ollama** (default) - Local models (`gemma-4-31b-it`, `gemma-4-26b-a4b-it`, `qwen3.6-27b`)
-- **Anthropic** - Claude API (`claude-opus-5-latest`, `claude-fable-5`, `claude-3-7-sonnet-latest`, `claude-3-5-haiku-20241022`)
-- **OpenAI** - OpenAI API (`gpt-5.6-sol`, `gpt-5.5`, `o3-mini`, `o1`, `gpt-4o`)
-- **Google Gemini** - Gemini API (`gemini-3.1-pro`, `gemini-3.7-flash`, `gemma-4-31b-it`)
-- **DeepSeek** - DeepSeek API (`deepseek-v4-pro`, `deepseek-v4-flash`, `deepseek-reasoner`)
-- **Ollama Cloud / Custom endpoints** - OpenAI-compatible APIs
-
-### 2026 Coding Agent Enhancements
-
-- 🗺️ **AST Repo Map** - Extracts Class/Function/Method signatures to provide project-wide architectural context within ~2k tokens.
-- ✏️ **Fuzzy Search-and-Replace** - Multi-level fuzzy matching for code edits (whitespace-insensitive, difflib similarity) preventing unnecessary full file rewrites.
-- ⚡ **Post-Edit Fast Static Diagnostics** - Sub-millisecond `ast.parse` syntax verification immediately after code edits for instant self-correction.
-- 🧠 **Reasoning / Thinking Stream Decoupling** - Cleanly isolates `<think>` traces from Action JSON payloads.
-
-## Quick Start
+Requires Python 3.11+ on macOS or Linux.
 
 ```bash
-# Clone and install
-git clone git@github.com:dyu55/My-Agent.git
-cd My-Agent
-python -m pip install .
-
-# Interactive CLI mode
-python main.py --chat
-
-# Execute single task
-python main.py "Create a TODO app"
-
-# Specify model/provider
-python main.py --provider ollama --model gemma-4-31b-it
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -e '.[dev]'
+myagent demo --workspace /tmp/myagent-demo
+myagent serve --workspace /tmp/myagent-demo
 ```
 
-## Project Structure
+Open **http://127.0.0.1:8001**. The demo creates a temperature-conversion module and its tests, executes pytest, records results, and exposes the file diff. **The demo's model decisions are a deterministic replay; the file operations, tests, persistence, and browser view are real.** Use a fresh demo directory each time.
 
-```
-myAgent/
-├── agent/                     # Agent core
-│   ├── actions.py            # Shared action/result contracts
-│   ├── engine.py             # AgentEngine - Plan/Act/Reflect loop
-│   ├── planner.py           # TaskPlanner - task decomposition
-│   ├── executor.py          # ToolExecutor - action execution
-│   ├── reflector.py         # ResultReflector - error classification
-│   ├── coordinator.py       # Multi-agent coordination
-│   ├── skills/              # Skills system
-│   │   ├── skill_engine.py  # Parameterized skill execution
-│   │   └── skill_templates.py # Skill scaffolding
-│   └── tools/               # Modular tools
-│       ├── file_tools.py    # File tools with Fuzzy Search-and-Replace
-│       ├── repo_map.py      # AST-based project symbol map
-│       ├── exec_tools.py
-│       ├── search_tools.py
-│       ├── git_tools.py
-│       ├── test_tools.py
-│       ├── quality_tools.py
-│       ├── deploy_tools.py
-│       ├── mcp_tools.py
-│       ├── browser_tools.py
-│       └── rollback_tools.py
-├── cli/
-│   ├── michael.py           # Claude Code style CLI
-│   ├── interface.py
-│   └── commands.py
-├── memory/                   # External memory
-│   ├── embedding_store.py   # Layer 3: ChromaDB + Ollama embeddings
-│   ├── state_manager.py     # Progress tracking
-│   ├── external_memory.py   # Workflow orchestrator
-│   └── cross_session_memory.py
-├── skills/                    # Skills registry
-│   ├── registry.py          # SkillRegistry + BaseSkill
-│   └── builtin/             # Built-in skills
-│       ├── test_generation.py
-│       ├── api_design.py
-│       ├── doc_generation.py
-│       └── browser_skill.py
-├── utils/
-│   ├── model_provider.py    # ModelProviderFactory
-│   ├── llm_cache.py         # Response caching
-│   ├── cost_tracker.py      # Usage monitoring
-│   └── streaming_progress.py
-├── mcp/                      # Model Context Protocol
-├── tests/                    # pytest test suite
-└── main.py                  # Entry point
-```
+## Run your own task
 
-## External Memory Workflow
-
-```
-┌──────────────────────────────────────────────────────────────┐
-│                   External Memory Loop                       │
-├──────────────────────────────────────────────────────────────┤
-│                                                              │
-│   ┌─────────────┐    ┌─────────────┐    ┌─────────────┐     │
-│   │ 1. READ     │ →  │ 2. WRITE    │ →  │ 3. TEST     │     │
-│   │   STATE     │    │   CODE      │    │   CODE      │     │
-│   └─────────────┘    └─────────────┘    └─────────────┘     │
-│         ↑                                        │           │
-│         │           ┌─────────────┐              ↓           │
-│         └───────────│ 6. CLEAR    │ ← ┌─────────────┐       │
-│                     │   CONTEXT   │   │ 4. GIT      │       │
-│                     └─────────────┘   │   COMMIT    │       │
-│                                        └─────────────┘       │
-│                                              │               │
-│                                              ↓               │
-│                                        ┌─────────────┐       │
-│                                        │ 5. UPDATE  │       │
-│                                        │   PROGRESS │       │
-│                                        └─────────────┘       │
-│                                                              │
-└──────────────────────────────────────────────────────────────┘
-```
-
-## Configuration
+Start an Ollama server and provide the name of a model you have installed:
 
 ```bash
-cp .env.example .env
+myagent run 'Add input validation and tests to the parser' \
+  --workspace /path/to/project \
+  --provider ollama --model your-installed-model \
+  --allow-write --allow-exec
 ```
 
-Environment variables:
+OpenAI-compatible services use `--provider openai --base-url https://api.openai.com/v1 --model YOUR_MODEL`. Set the key through `MYAGENT_API_KEY`; keys are not stored in run checkpoints. `MYAGENT_PROVIDER`, `MYAGENT_MODEL`, and `MYAGENT_BASE_URL` provide defaults. The example `.env` file is not loaded automatically.
+
+File writes and process execution require separate flags. A run pauses if it needs a permission that was not granted. Granting `--allow-exec` allows arbitrary programs with your user account's filesystem/network access; it is **not an operating-system sandbox**. Run unfamiliar projects in a disposable container or VM. Remote models receive the task and selected workspace context.
 
 ```bash
-# Provider (ollama, openai, anthropic)
-ACTIVE_PROVIDER=ollama
-
-# Model (gemma4:latest, qwen2.5:9b, etc.)
-MODEL_NAME=gemma4:latest
-
-# Ollama endpoint
-OLLAMA_HOST=http://localhost:11434
-
-# Optional: Ollama Cloud API key
-# OLLAMA_API_KEY=your-api-key
+myagent runs --workspace /path/to/project
+myagent show RUN_ID --workspace /path/to/project
+myagent resume RUN_ID --workspace /path/to/project --allow-write --allow-exec
+myagent undo RUN_ID --workspace /path/to/project
+myagent doctor --workspace /path/to/project
 ```
 
-## Development
+## What makes the runtime useful
+
+- **Plan–Act–Reflect:** a validated dependency graph, one structured action at a time, a separate reflection step, bounded retries, and explicit completion checks. A model cannot mark plan steps complete before executing them.
+- **Typed tool contracts:** file listing/reading, literal search, AST repository maps, file writes and exact edits, subprocess commands, pytest, and Git diff. Register another tool with its schema, permission, and handler.
+- **Verified execution:** real exit codes, timeouts that terminate the process group, bounded output, XML-safe JUnit parsing, and failure when no tests pass. Code or command mutations invalidate previous verification.
+- **Durable runs:** SQLite checkpoints and ordered events, a lock against concurrent resumes, call/time/action budgets, and persistent memory of completed tasks scoped to the workspace.
+- **Careful edits:** workspace containment, protected paths, current-content hashes, unique replacement spans, Python syntax checks before writes, and atomic replacement with original bytes recorded.
+- **Review and recovery:** a responsive browser viewer for task steps, event history, test counts, and file diffs. Undo checks all file hashes before restoring file-tool changes and refuses to overwrite subsequent user edits.
+
+## Interruption and verification
+
+Each tool intent is saved **before execution**. If the process stops between the action and its result, resume pauses for review; it does not blindly repeat that action. Inspect the workspace and run history, then pass `--acknowledge-interrupted` to let the model continue from current state.
+
+Undo restores only changes made by `write_file` and `edit_file`. Shell commands can have side effects outside the workspace and are not automatically reversible. Multiple file restores are preflight-checked but are not a filesystem-wide transaction.
+
+The default budgets are 40 model calls, 600 seconds of accumulated runtime, 12 tool actions per step, and two reflection retries. A budget pause can be resumed with larger limits. Purely informational tasks do not require pytest; mutations require a successful `run_tests` after the latest change before the run can report success. This intentionally targets Python projects for automated verification.
+
+## Architecture and development
+
+```mermaid
+flowchart LR
+    A[CLI task] --> B[Validated plan DAG]
+    B --> C[Action / permission check]
+    C --> D[Tool registry]
+    D --> E[Structured result]
+    E --> F[Reflection + verification gate]
+    F --> C
+    F --> G[Completed task memory]
+    C --> H[(SQLite checkpoints / events / file journal)]
+    H --> I[Run Studio]
+```
 
 ```bash
-# Install development tools
-python -m pip install -e ".[dev]"
-
-# Run the automated suite (external-service tests are explicitly skipped)
-python -m pytest
-
-# Opt in after configuring and starting the required model/embedding services
-python -m pip install ".[memory]"
-python -m pytest --run-live -m live
-
-# Run specific test suites
-pytest tests/test_skill_engine.py -v
-pytest tests/test_memory_interface.py -v
-
-# Start interactive CLI
-python main.py --chat
+pytest --cov=myagent --cov-report=term-missing
+ruff check .
+ruff format --check .
+python -m build
 ```
 
-## Refactoring and validation
+The default install includes pytest because it is a runtime verification tool. The browser viewer binds to loopback and provides read-only access to runs; it is not an authenticated multi-user service. See [architecture](docs/ARCHITECTURE.md), [validation](docs/VALIDATION.md), and [migration](docs/MIGRATION.md).
 
-The executor now uses structured tool outcomes, records every attempt, and delegates side effects to one tool registry. Shell exit codes and pytest JUnit reports determine success. File reads, edits, directory operations, and batch writes share workspace containment checks.
-
-Installing the package provides the `myagent` command and includes the CLI, skills, MCP, wiki, and memory modules. ChromaDB is available through the optional `memory` extra. See [the refactoring report](docs/REFACTORING.md) for test scope and compatibility notes.
-
-## Architecture Highlights
-
-### Error Classification (5 Categories)
-
-```
-ErrorCategory:
-├── SYNTAX_ERROR      → Fix syntax
-├── LOGIC_ERROR       → Redesign logic
-├── TOOL_ERROR        → Check tool parameters
-├── MODEL_HALLUCINATION → Verify assumptions
-└── DEPENDENCY_ERROR  → Check dependencies
-```
-
-### Data Structures
-
-```python
-ExecutionPlan / SubTask    # Task decomposition with dependencies
-Action                     # Single tool execution
-ExecutionResult            # SUCCESS / FAILURE / PARTIAL / SKIPPED
-Reflection                 # Error classification + recovery suggestions
-MemoryEntry               # Memory with embedding, tags, session_id
-```
-
-## Tech Stack
-
-- **Runtime**: Python 3.11+
-- **LLM**: Ollama (local), OpenAI, Anthropic
-- **Vector DB**: ChromaDB + Ollama embeddings
-- **Testing**: pytest; service-dependent tests require explicit opt-in
-- **CLI**: Claude Code style interaction
-
-## License
-
-MIT License
+MIT license. Protocol references: [Ollama structured outputs](https://docs.ollama.com/capabilities/structured-outputs), [OpenAI structured outputs](https://developers.openai.com/api/docs/guides/structured-outputs).

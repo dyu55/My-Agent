@@ -1,0 +1,16 @@
+.git
+.venv
+__pycache__
+.env
+.env.*
+.rag-assistant
+.myagent
+output
+.playwright-cli
+docs
+tests
+dist
+build
+data
+logs
+workspace*

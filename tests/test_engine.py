@@ -1,140 +1,197 @@
-"""Tests for agent/engine.py core functionality."""
-import json
+import uuid
+
 import pytest
-from agent.engine import (
-    _extract_json_from_response,
-    AgentConfig,
-    AgentState,
+from fastapi.testclient import TestClient
+
+from myagent.engine import Engine
+from myagent.models import Limits, Permissions, Plan, Run
+from myagent.providers import DemoModel, ProviderError
+from myagent.tools import ToolRegistry
+from myagent.viewer import create_app
+
+
+class ScriptedModel:
+    provider, model, base_url = "scripted", "test", ""
+    timeout = 60
+
+    def __init__(self, responses):
+        self.responses = iter(responses)
+
+    def complete(self, phase, payload, schema):
+        value = next(self.responses)
+        if isinstance(value, BaseException):
+            raise value
+        return value
+
+
+PLAN = {"steps": [{"id": "step", "title": "Perform the task", "depends_on": []}]}
+DONE = {"complete": True, "summary": "Task completed."}
+PASSED = {"verdict": "passed", "summary": "Observed results support completion."}
+
+
+def test_demo_runs_real_tools_and_remembers_success(tmp_path):
+    engine = Engine(tmp_path, DemoModel(), Permissions(write=True, execute=True))
+    run = engine.new("Build temperature conversions with tests")
+    assert run.status == "succeeded" and run.verified_version == run.mutation_version
+    assert run.steps[-1].last_result["data"]["passed"] == 10
+    assert (tmp_path / "temperatures.py").is_file()
+    assert len(engine.store.diff(run.id, engine.workspace.resolve)) == 2
+    assert engine.store.recall("temperature conversions")[0]["run_id"] == run.id
+    assert engine.advance(run.id).calls == run.calls
+
+
+def test_permission_pause_then_resume_has_no_early_side_effects(tmp_path):
+    engine = Engine(tmp_path, DemoModel(), Permissions())
+    paused = engine.new("Build temperature conversions with tests")
+    assert paused.status == "paused" and "allow-write" in paused.summary
+    assert not (tmp_path / "temperatures.py").exists() and paused.pending_action is None
+    resumed = Engine(tmp_path, DemoModel(), Permissions(write=True, execute=True)).advance(
+        paused.id
+    )
+    assert resumed.status == "succeeded" and resumed.steps[-1].last_result["data"]["passed"] == 10
+
+
+@pytest.mark.parametrize(
+    "steps",
+    [
+        [
+            {"id": "one", "title": "A", "depends_on": ["two"]},
+            {"id": "two", "title": "B", "depends_on": ["one"]},
+        ],
+        [{"id": "one", "title": "A", "depends_on": ["missing"]}],
+        [{"id": "one", "title": "A"}, {"id": "one", "title": "B"}],
+    ],
 )
+def test_invalid_plan_dependencies_are_rejected(steps):
+    with pytest.raises(ValueError):
+        Plan(steps=steps)
 
 
-class TestExtractJsonFromResponse:
-    """Tests for JSON extraction from LLM responses."""
-
-    def test_direct_json_parse(self):
-        """Test parsing valid JSON directly."""
-        data = {"command": "write", "path": "test.py", "content": "print('hello')"}
-        response = json.dumps(data)
-        result = _extract_json_from_response(response)
-        assert result == data
-
-    def test_json_in_markdown_block(self):
-        """Test extracting JSON from markdown code block."""
-        response = '''
-Here is the JSON:
-
-```json
-{"command": "write", "path": "test.py"}
-```
-
-That's the output.
-'''
-        result = _extract_json_from_response(response)
-        assert result == {"command": "write", "path": "test.py"}
-
-    def test_json_in_plain_backticks(self):
-        """Test extracting JSON from plain backticks."""
-        response = '''
-The result is:
-```
-{"command": "read", "path": "main.py"}
-```
-'''
-        result = _extract_json_from_response(response)
-        assert result == {"command": "read", "path": "main.py"}
-
-    def test_json_array_in_markdown(self):
-        """Test extracting JSON array from response."""
-        response = '''
-```json
-[
-  {"id": "task_1", "description": "First task"},
-  {"id": "task_2", "description": "Second task"}
-]
-```
-'''
-        result = _extract_json_from_response(response)
-        assert isinstance(result, list)
-        assert len(result) == 2
-
-    def test_invalid_json_returns_none(self):
-        """Test that invalid JSON returns None."""
-        response = "This is not JSON at all"
-        result = _extract_json_from_response(response)
-        assert result is None
-
-    def test_non_string_input(self):
-        """Test handling of non-string input."""
-        result = _extract_json_from_response({"key": "value"})
-        assert result == {"key": "value"}
-
-    def test_json_with_whitespace(self):
-        """Test JSON with extra whitespace."""
-        response = '   {"command": "test"}   '
-        result = _extract_json_from_response(response)
-        assert result == {"command": "test"}
+def test_model_cannot_preset_completed_plan_state(tmp_path):
+    model = ScriptedModel(
+        [{"steps": [{"id": "step", "title": "Check", "status": "succeeded"}]}, DONE, PASSED]
+    )
+    run = Engine(tmp_path, model).new("Read-only analysis")
+    assert run.status == "succeeded" and run.calls == 3
 
 
-class TestAgentConfig:
-    """Tests for AgentConfig dataclass."""
-
-    def test_default_values(self, tmp_path):
-        """Test default configuration values."""
-        config = AgentConfig(workspace=tmp_path)
-        assert config.model == "qwen3.5:9b"
-        assert config.provider == "ollama"
-        assert config.base_url == "http://localhost:11434"
-        assert config.api_key is None
-        assert config.max_task_retries == 3
-        assert config.max_plan_retries == 2
-        assert config.enable_llm_reflection is True
-        assert config.trace_enabled is True
-        assert config.progress_callback is None
-
-    def test_custom_values(self, tmp_path):
-        """Test custom configuration values."""
-        callback = lambda p, t, e: None
-        config = AgentConfig(
-            workspace=tmp_path,
-            model="qwen3.5:9b",
-            provider="ollama",
-            base_url="http://192.168.0.100:11434",
-            api_key="test-key",
-            max_task_retries=5,
-            max_plan_retries=3,
-            enable_llm_reflection=False,
-            trace_enabled=False,
-            progress_callback=callback,
-        )
-        assert config.model == "qwen3.5:9b"
-        assert config.provider == "ollama"
-        assert config.base_url == "http://192.168.0.100:11434"
-        assert config.api_key == "test-key"
-        assert config.max_task_retries == 5
-        assert config.max_plan_retries == 3
-        assert config.enable_llm_reflection is False
-        assert config.trace_enabled is False
-        assert config.progress_callback is callback
+def test_failed_command_cannot_be_reported_success(tmp_path):
+    model = ScriptedModel(
+        [
+            PLAN,
+            {
+                "action": {
+                    "tool": "run_command",
+                    "arguments": {"argv": ["python", "-c", "raise SystemExit(3)"]},
+                }
+            },
+            DONE,
+            DONE,
+            DONE,
+        ]
+    )
+    run = Engine(tmp_path, model, Permissions(execute=True)).new("Run a command")
+    assert run.status == "failed" and run.steps[0].unresolved_tools == ["run_command"]
+    assert run.steps[0].last_result["data"]["returncode"] == 3
 
 
-class TestAgentState:
-    """Tests for AgentState dataclass."""
+def test_write_without_verification_is_paused_and_gets_verification_step(tmp_path):
+    model = ScriptedModel(
+        [
+            PLAN,
+            {
+                "action": {
+                    "tool": "write_file",
+                    "arguments": {"path": "new.py", "content": "value = 1\n"},
+                }
+            },
+            DONE,
+            PASSED,
+        ]
+    )
+    run = Engine(tmp_path, model, Permissions(write=True)).new("Write a Python module")
+    assert run.status == "paused" and run.steps[-1].id == "verify_final"
+    assert run.needs_verification and run.verified_version == -1
 
-    def test_default_values(self):
-        """Test default state values."""
-        state = AgentState()
-        assert state.current_plan is None
-        assert state.current_task_id is None
-        assert state.task_attempts == 0
-        assert state.total_llm_calls == 0
-        assert state.execution_history == []
-        assert state.is_complete is False
-        assert state.final_result is None
-        assert state.force_write_command is False
 
-    def test_force_write_command_flag(self):
-        """Test force_write_command flag can be toggled."""
-        state = AgentState()
-        assert state.force_write_command is False
-        state.force_write_command = True
-        assert state.force_write_command is True
+def test_budget_pause_can_resume_with_larger_limit(tmp_path):
+    engine = Engine(
+        tmp_path, DemoModel(), Permissions(write=True, execute=True), Limits(max_calls=1)
+    )
+    run = engine.new("Build temperature conversions")
+    assert run.status == "paused" and run.calls == 1 and not (tmp_path / "temperatures.py").exists()
+    completed = Engine(
+        tmp_path, DemoModel(), Permissions(write=True, execute=True), Limits(max_calls=40)
+    ).advance(run.id)
+    assert completed.status == "succeeded"
+
+
+def test_provider_outage_preserves_run_without_claiming_completion(tmp_path):
+    engine = Engine(tmp_path, ScriptedModel([ProviderError("Service unavailable")]))
+    run = engine.new("Build something")
+    assert run.status == "paused" and run.calls == 1 and run.steps == []
+    assert engine.store.load(run.id).summary == "Service unavailable"
+
+
+def test_invalid_action_schema_is_recoverable(tmp_path):
+    run = Engine(
+        tmp_path, ScriptedModel([PLAN, {"action": {"tool": "list_files"}, "complete": True}])
+    ).new("Inspect files")
+    assert run.status == "paused" and "schema" in run.summary
+    assert run.pending_action is None
+
+
+def test_interrupted_action_is_not_replayed_without_acknowledgment(tmp_path, monkeypatch):
+    engine = Engine(tmp_path, DemoModel(), Permissions(write=True, execute=True))
+    real_execute = ToolRegistry.execute
+
+    def interrupt(self, action):
+        raise KeyboardInterrupt()
+
+    monkeypatch.setattr(ToolRegistry, "execute", interrupt)
+    run = engine.new("Build conversions")
+    assert run.status == "paused" and run.pending_action.tool == "repo_map"
+    monkeypatch.setattr(ToolRegistry, "execute", real_execute)
+    paused = engine.advance(run.id)
+    assert paused.calls == run.calls and "acknowledge-interrupted" in paused.summary
+    completed = engine.advance(run.id, acknowledge_interrupted=True)
+    assert completed.status == "succeeded"
+
+
+def test_resume_refuses_another_model_or_concurrent_writer(tmp_path):
+    engine = Engine(tmp_path, DemoModel())
+    run = Run(
+        id=uuid.uuid4().hex,
+        task="test",
+        workspace=str(tmp_path),
+        provider="demo",
+        model="deterministic-replay",
+    )
+    engine.store.save(run)
+    with pytest.raises(ValueError, match="original provider"):
+        Engine(tmp_path, ScriptedModel([])).advance(run.id)
+    with engine.store.lock(run.id), pytest.raises(ValueError, match="already active"):
+        engine.advance(run.id)
+
+
+def test_reflection_retry_limit_prevents_infinite_loop(tmp_path):
+    retry = {"verdict": "retry", "summary": "Need more evidence."}
+    run = Engine(tmp_path, ScriptedModel([PLAN, DONE, retry, DONE, retry, DONE, retry])).new(
+        "Inspect files"
+    )
+    assert run.status == "failed" and run.steps[0].attempts == 3
+
+
+def test_run_studio_shows_real_results_and_has_no_execution_endpoint(tmp_path):
+    engine = Engine(tmp_path, DemoModel(), Permissions(write=True, execute=True))
+    run = engine.new("Build temperature conversions")
+    with TestClient(create_app(tmp_path)) as client:
+        assert client.get("/").status_code == 200
+        assert client.get("/static/app.js").status_code == 200
+        assert client.get("/api/health").json()["read_only"]
+        assert client.get("/api/runs").json()[0]["id"] == run.id
+        detail = client.get(f"/api/runs/{run.id}").json()
+        assert len(detail["changes"]) == 2 and detail["events"]
+        assert "workspace" not in detail["run"] and "base_url" not in detail["run"]
+        assert client.post("/api/run", json={"task": "do something"}).status_code in {404, 405}
+        assert client.get("/api/runs/missing").status_code == 404
