@@ -1,12 +1,185 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="/static/favicon.svg" type="image/svg+xml"><title>MyAgent · Run Studio</title><link rel="stylesheet" href="/static/style.css"><script src="/static/app.js" defer></script></head>
-<body><aside class="sidebar"><a class="brand" href="/"><span class="brand-icon">m<span>↗</span></span><span>MyAgent<small>RUN STUDIO</small></span></a><div class="sidebar-label">WORKSPACE</div><div class="workspace"><span>⌑</span><div id="workspace-name">Loading…<small>LOCAL DEVELOPMENT</small></div></div><div class="sidebar-label runs-heading">RECENT RUNS <span id="run-count">00</span></div><div id="runs"></div><div class="sidebar-bottom"><div><span class="dot"></span> Local runtime</div><p>Every action leaves a trail.</p><a href="/docs" target="_blank" rel="noopener">API reference ↗</a></div></aside>
-<main><header class="topbar"><div>Workspace <span>/</span> Run Studio</div><div class="viewer-badge">◉ &nbsp; READ-ONLY INSPECTOR</div></header><div id="error" role="alert" hidden></div>
-<div id="empty" class="empty" hidden><span class="eyebrow">YOUR NEXT BUILD STARTS HERE</span><h1>From a task to verified code.</h1><p>Run a task from the CLI, then inspect its decisions and results here.</p><pre>myagent demo --workspace /tmp/myagent-demo</pre></div>
-<div id="detail" hidden><section class="hero"><div class="hero-top"><span class="eyebrow">PLAN. EXECUTE. VERIFY.</span><span id="provider" class="model-badge"></span></div><h1>From a task to verified code.</h1><div class="task-line"><span class="task-label">TASK</span><p id="task"></p></div><div class="run-line"><span id="run-status" class="status"></span><span id="run-id"></span><span id="run-time"></span></div></section>
-<section class="metrics" aria-label="Run results"><article><span>PLAN PROGRESS</span><strong id="steps-metric">—</strong><small>dependency-ordered steps</small></article><article><span>FILES CHANGED</span><strong id="files-metric">—</strong><small>with recoverable originals</small></article><article><span>TESTS PASSED</span><strong id="tests-metric">—</strong><small id="tests-note">verified by pytest</small></article><article><span>MODEL CALLS</span><strong id="calls-metric">—</strong><small>recorded across this run</small></article></section>
-<nav class="tabs" aria-label="Run views"><button class="active" data-tab="overview">Run overview</button><button data-tab="changes">Files & diff <span id="diff-count">0</span></button><button data-tab="events">Event timeline <span id="event-count">0</span></button><button id="refresh" class="refresh">↻ Refresh</button></nav>
-<section id="overview-tab" class="tab-panel overview"><div class="plan-card"><div class="section-heading"><span>EXECUTION PLAN</span><span>DEPENDENCIES RESOLVED IN ORDER</span></div><div id="steps"></div></div><aside class="outcome-card"><div class="section-heading"><span>THE OUTCOME</span><span>↗</span></div><h2 id="outcome-title">Work you can inspect.</h2><p id="summary"></p><div id="verification" class="verification"></div><div class="boundary"><strong>Review before you ship.</strong><p>File-tool edits can be restored. Command side effects are outside automatic rollback.</p></div></aside></section>
-<section id="changes-tab" class="tab-panel" hidden><div id="changes"></div></section>
-<section id="events-tab" class="tab-panel" hidden><div class="event-panel"><div class="section-heading"><span>RUN JOURNAL</span><span>ORDERED · PERSISTED · INSPECTABLE</span></div><div id="events"></div></div></section>
-</div><footer><span>MYAGENT / 1.0</span><span>Built around observable outcomes.</span><span id="footer-state">LOCAL WORKSPACE</span></footer></main></body></html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <link rel="icon" href="/static/favicon.svg" type="image/svg+xml" />
+    <title>MyAgent — Execution Control</title>
+    <link rel="stylesheet" href="/static/style.css" />
+    <script src="/static/app.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to run details</a>
+    <header class="command-bar">
+      <a class="brand" href="/" aria-label="MyAgent home"
+        ><span class="brand-icon" aria-hidden="true">[<b>m</b>]</span
+        ><span
+          >MYAGENT<span class="brand-version"> / EXECUTION CONTROL</span></span
+        ></a
+      >
+      <div class="system-status">
+        <span class="signal"></span> LOCAL RUNTIME
+        <span class="separator">/</span> <span>INSPECT MODE</span>
+      </div>
+      <button id="refresh" class="refresh" aria-label="Refresh run data">
+        ↻ <span>SYNC</span>
+      </button>
+    </header>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Run explorer">
+        <div class="sidebar-heading">
+          <span>EXPLORER</span
+          ><span class="panel-glyph" aria-hidden="true">⌘</span>
+        </div>
+        <div class="workspace">
+          <span class="folder-glyph" aria-hidden="true">▱</span>
+          <div>
+            <span class="workspace-caption">ACTIVE WORKSPACE</span
+            ><strong id="workspace-name">Loading…</strong>
+          </div>
+        </div>
+        <div class="runs-heading">
+          <span>RUN ARCHIVE</span><span id="run-count">00</span>
+        </div>
+        <div id="runs"></div>
+        <div class="sidebar-bottom">
+          <span class="sidebar-index">01 / OBSERVABILITY</span>
+          <p>Inspect the plan.<br />Read the diff.<br />Verify the result.</p>
+          <a href="/docs" target="_blank" rel="noopener"
+            >API DOCUMENTATION ↗</a
+          >
+          <div class="scope-note">
+            VIEWER IS READ-ONLY<br />EXECUTION STAYS IN YOUR CLI
+          </div>
+        </div>
+      </aside>
+      <main id="main">
+        <div id="error" role="alert" hidden></div>
+        <div id="empty" class="empty" hidden>
+          <div class="empty-symbol" aria-hidden="true">&gt;_</div>
+          <span class="eyebrow">NO RUNS RECORDED</span>
+          <h1>Awaiting a mission.</h1>
+          <p>
+            Start a task in your terminal. Its execution graph, file changes,
+            and verification results will appear here.
+          </p>
+          <pre>myagent demo --workspace /tmp/myagent-demo</pre>
+        </div>
+        <div id="detail" hidden>
+          <section class="mission">
+            <div class="mission-heading">
+              <span class="eyebrow">MISSION BRIEF</span
+              ><span id="provider" class="model-badge"></span>
+            </div>
+            <h1 id="task"></h1>
+            <div class="run-line">
+              <span id="run-status" class="status"></span
+              ><span id="run-id"></span><span id="run-time"></span>
+            </div>
+          </section>
+          <section class="telemetry" aria-label="Run results">
+            <div><span>STEPS</span><strong id="steps-metric">—</strong></div>
+            <div><span>FILES</span><strong id="files-metric">—</strong></div>
+            <div class="test-telemetry">
+              <span>TESTS PASSED</span><strong id="tests-metric">—</strong
+              ><small id="tests-note">No test report</small>
+            </div>
+            <div>
+              <span>MODEL CALLS</span><strong id="calls-metric">—</strong>
+            </div>
+          </section>
+          <nav class="tabs" aria-label="Run views">
+            <button class="active" data-tab="overview" aria-current="page">
+              <span aria-hidden="true">⌘</span> Execution graph</button
+            ><button data-tab="changes">
+              <span aria-hidden="true">±</span> Source changes
+              <b id="diff-count">0</b></button
+            ><button data-tab="events">
+              <span aria-hidden="true">≡</span> Event log
+              <b id="event-count">0</b></button
+            ><span class="tab-end">CHECKPOINT / PERSISTED</span>
+          </nav>
+          <section
+            id="overview-tab"
+            class="tab-panel overview"
+            aria-label="Execution graph"
+          >
+            <div class="plan-board">
+              <div class="section-heading">
+                <span>PLAN / DEPENDENCY GRAPH</span><span aria-hidden="true">LEFT → RIGHT</span>
+              </div>
+              <div id="steps"></div>
+              <div class="board-foot">
+                <span class="signal"></span> Tool results are recorded before
+                the next decision.
+              </div>
+            </div>
+            <div class="inspect-grid">
+              <section class="outcome-panel">
+                <div class="section-heading">
+                  <span>RESULT / SUMMARY</span
+                  ><span aria-hidden="true">↗</span>
+                </div>
+                <h2 id="outcome-title">Inspect the outcome.</h2>
+                <p id="summary"></p>
+                <div id="verification" class="verification"></div>
+                <div class="boundary">
+                  <span>ROLLBACK BOUNDARY</span>
+                  <p>
+                    File-tool changes retain their originals. Command side
+                    effects require separate review.
+                  </p>
+                </div>
+              </section>
+              <section class="terminal-panel" aria-label="Latest tool output">
+                <div class="terminal-heading">
+                  <span><i></i><i></i><i></i></span><span>TOOL OUTPUT</span
+                  ><span id="terminal-tool">—</span>
+                </div>
+                <div class="terminal-command">
+                  <span>›</span
+                  ><span id="terminal-command">Awaiting tool output</span>
+                </div>
+                <pre id="terminal-output">No tool output recorded.</pre>
+                <div class="terminal-bottom">
+                  <span id="terminal-result">NO RESULT</span
+                  ><span>PERSISTED EXECUTION DATA</span>
+                </div>
+              </section>
+            </div>
+          </section>
+          <section
+            id="changes-tab"
+            class="tab-panel"
+            aria-label="Source changes"
+            hidden
+          >
+            <div class="panel-intro">
+              <span>WORKSPACE CHANGES</span><span>ORIGINAL → CURRENT</span>
+            </div>
+            <div id="changes"></div>
+          </section>
+          <section
+            id="events-tab"
+            class="tab-panel"
+            aria-label="Event log"
+            hidden
+          >
+            <div class="event-panel">
+              <div class="section-heading">
+                <span>EXECUTION JOURNAL</span
+                ><span>SEQUENCE / EVENT / TIMESTAMP</span>
+              </div>
+              <div id="events"></div>
+            </div>
+          </section>
+        </div>
+        <footer>
+          <span><span class="signal"></span> MYAGENT / 1.0</span
+          ><span id="footer-state">LOCAL WORKSPACE</span
+          ><span>END OF RECORD <b>■</b></span>
+        </footer>
+      </main>
+    </div>
+  </body>
+</html>

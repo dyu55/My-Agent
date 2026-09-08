@@ -1,10 +1,12 @@
-# MyAgent · Local coding agent
+# MyAgent · Execution Control
 
 ![MyAgent — Plan, execute and verify](docs/screenshots/myagent-overview.png)
 
-Turn a task into a plan, execute tools, check the result, and resume from a durable checkpoint. Inspect the actual file changes and test results in **Run Studio**, the included local browser viewer.
+Turn a task into a plan, execute tools, check the result, and resume from a durable checkpoint. Inspect the actual file changes and test results in **Execution Control**, the included local browser viewer.
 
 **Version 1.0 is written from scratch.** It replaces the earlier collection of agent, skill, memory, and provider modules with a small typed runtime and an explicit execution state machine. The earlier implementation remains available in Git history.
+
+Execution Control is a dark developer workspace with a dependency graph, inline telemetry, source diffs, and persisted tool output. [Design notes](docs/DESIGN.md) · [Interface gallery](docs/SCREENSHOTS.md).
 
 ## Try a real execution without a model
 
@@ -72,7 +74,7 @@ flowchart LR
     F --> C
     F --> G[Completed task memory]
     C --> H[(SQLite checkpoints / events / file journal)]
-    H --> I[Run Studio]
+    H --> I[Execution Control]
 ```
 
 ```bash

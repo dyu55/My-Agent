@@ -1,29 +1,37 @@
-# Screenshots
+# Interface gallery
 
-Captured in Chromium through actual application interactions on 2026-09-08. Desktop viewport: 1440 × 1050. Mobile viewport: 390 × 844. Full-page images retain their natural height.
+Captured in Chromium from the redesigned application on 2026-09-08. See [design notes](DESIGN.md) for layout and interaction decisions. Desktop viewport: 1440 × 1050; mobile viewport: 390 × 844. Original PNG dimensions are listed below.
 
-RAG uses the bundled fictional Atlas corpus in offline extractive mode. MyAgent uses a labelled deterministic model replay with real file operations, pytest execution, and persisted run state. These images do not demonstrate live model performance.
+MyAgent uses a labelled deterministic model replay. The files, ten passing tests, dependency relationships, tool output, and persisted events are real execution results. These screenshots do not establish live model performance.
 
-## MyAgent — Plan, execute and verify
+## MyAgent — Execution Control
 
-![MyAgent — Plan, execute and verify](screenshots/myagent-overview.png)
+![MyAgent — Execution Control](screenshots/myagent-overview.png)
 
-A completed task with three dependency-ordered steps, two file changes, and ten passing tests.
+A dark developer console showing the real task dependency graph, verification results, and latest tool output.
 
-## MyAgent — Inspect every edit
+1425 × 1184 PNG
 
-![MyAgent — Inspect every edit](screenshots/myagent-diff.png)
+## MyAgent — Source changes
 
-Review the actual code changes recorded by the file journal.
+![MyAgent — Source changes](screenshots/myagent-diff.png)
 
-## MyAgent — Execution history
+Inspect actual file changes with line numbers and clear diff highlighting.
 
-![MyAgent — Execution history](screenshots/myagent-events.png)
+1425 × 1623 PNG
 
-An ordered record of tool calls, results, reflection outcomes and task completion.
+## MyAgent — Event log
 
-## MyAgent — Mobile run inspector
+![MyAgent — Event log](screenshots/myagent-events.png)
 
-![MyAgent — Mobile run inspector](screenshots/myagent-mobile.png)
+A persisted execution journal with expandable tool output and timestamps.
 
-Review a persisted run and its verification results on a narrow screen.
+1425 × 1935 PNG
+
+## MyAgent — Mobile execution flow
+
+![MyAgent — Mobile execution flow](screenshots/myagent-mobile.png)
+
+A vertical dependency graph and stacked inspection panels for reviewing work on a narrow screen.
+
+375 × 1993 PNG
