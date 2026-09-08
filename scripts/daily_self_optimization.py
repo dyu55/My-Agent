@@ -73,7 +73,9 @@ def stage_tech_radar() -> bool:
 
 def stage_syntax_and_lint() -> bool:
     log("🔍", "Stage 2: Evaluating Python syntax & code quality...")
-    code, out = run_cmd("python3 -m py_compile src/myagent/engine.py src/myagent/cli.py src/myagent/models.py src/myagent/providers.py src/myagent/store.py src/myagent/tools.py src/myagent/viewer.py src/myagent/workspace.py")
+    code, out = run_cmd(
+        "python3 -m py_compile src/myagent/engine.py src/myagent/cli.py src/myagent/models.py src/myagent/providers.py src/myagent/store.py src/myagent/tools.py src/myagent/viewer.py src/myagent/workspace.py"
+    )
     if code != 0:
         log("❌", f"Syntax errors found:\n{out}")
         return False
@@ -99,7 +101,7 @@ def stage_run_tests() -> bool:
         log("❌", f"Test regression detected:\n{out}")
         return False
     # Parse passed test count
-    passed_line = [l for l in out.splitlines() if "passed" in l]
+    passed_line = [line for line in out.splitlines() if "passed" in line]
     summary = passed_line[-1] if passed_line else "All tests passed"
     log("✅", f"Tests passed successfully: {summary}")
     return True
