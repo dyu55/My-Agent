@@ -74,7 +74,17 @@ class Engine:
             sensitivity_findings=[f"{f.level.name}: {f.label}" for f in assessment.findings],
         )
         self.store.save(run)
-        self.event(run, "created", {"task": run.task, "provider": run.provider, "sensitivity": run.sensitivity, "routing": run.routing, "findings": run.sensitivity_findings})
+        self.event(
+            run,
+            "created",
+            {
+                "task": run.task,
+                "provider": run.provider,
+                "sensitivity": run.sensitivity,
+                "routing": run.routing,
+                "findings": run.sensitivity_findings,
+            },
+        )
         return self.advance(run.id)
 
     def advance(self, run_id: str, acknowledge_interrupted: bool = False) -> Run:
@@ -114,7 +124,9 @@ class Engine:
                         run,
                         "plan",
                         {
-                            "task": run.task if run.routing == "external_allowed" else assess(run.task).redacted_text,
+                            "task": run.task
+                            if run.routing == "external_allowed"
+                            else assess(run.task).redacted_text,
                             "sensitivity": run.sensitivity,
                             "routing": run.routing,
                             "repository": self.workspace.repo_map(),
