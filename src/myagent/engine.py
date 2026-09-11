@@ -12,6 +12,7 @@ from .providers import ProviderError
 from .store import RunStore
 from .tools import ToolRegistry
 from .workspace import Workspace
+from .sensitivity import assess, Sensitivity
 
 
 class BudgetReached(RuntimeError):
@@ -58,6 +59,9 @@ class Engine:
     def new(self, task: str) -> Run:
         if not task.strip() or len(task) > 12000:
             raise ValueError("Provide a task between 1 and 12,000 characters")
+        assessment = assess(task)
+        if assessment.level == Sensitivity.SECRET:
+            raise ValueError("Secret material detected; remove it before starting an AI run")
         run = Run(
             id=uuid.uuid4().hex,
             task=task.strip(),
@@ -65,9 +69,12 @@ class Engine:
             provider=self.model.provider,
             model=self.model.model,
             base_url=self.model.base_url,
+            sensitivity=assessment.level.name,
+            routing=assessment.route,
+            sensitivity_findings=[f"{f.level.name}: {f.label}" for f in assessment.findings],
         )
         self.store.save(run)
-        self.event(run, "created", {"task": run.task, "provider": run.provider})
+        self.event(run, "created", {"task": run.task, "provider": run.provider, "sensitivity": run.sensitivity, "routing": run.routing, "findings": run.sensitivity_findings})
         return self.advance(run.id)
 
     def advance(self, run_id: str, acknowledge_interrupted: bool = False) -> Run:
@@ -107,7 +114,9 @@ class Engine:
                         run,
                         "plan",
                         {
-                            "task": run.task,
+                            "task": run.task if run.routing == "external_allowed" else assess(run.task).redacted_text,
+                            "sensitivity": run.sensitivity,
+                            "routing": run.routing,
                             "repository": self.workspace.repo_map(),
                             "memories": self.store.recall(run.task),
                         },

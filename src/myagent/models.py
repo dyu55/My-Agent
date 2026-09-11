@@ -96,6 +96,9 @@ class Run(BaseModel):
     verified_version: int = -1
     needs_verification: bool = False
     base_url: str = ""
+    sensitivity: str = "PUBLIC"
+    routing: str = "external_allowed"
+    sensitivity_findings: list[str] = Field(default_factory=list)
 
 
 class Limits(StrictModel):
