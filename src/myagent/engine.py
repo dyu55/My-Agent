@@ -9,10 +9,10 @@ from pydantic import ValidationError
 
 from .models import Decision, Limits, Permissions, Plan, Reflection, Run, Step
 from .providers import ProviderError
+from .sensitivity import Sensitivity, assess
 from .store import RunStore
 from .tools import ToolRegistry
 from .workspace import Workspace
-from .sensitivity import assess, Sensitivity
 
 
 class BudgetReached(RuntimeError):
